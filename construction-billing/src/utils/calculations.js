@@ -240,6 +240,166 @@ export function getClientsUniques(plans) {
 }
 
 /**
+ * Retourne la liste des chantiers pour un client donné
+ */
+export function getChantiersParClient(plans, codeClient) {
+  const chantiersMap = new Map();
+
+  plans.filter(p => p.codeClient === codeClient).forEach(plan => {
+    if (plan.codeChantier && !chantiersMap.has(plan.codeChantier)) {
+      chantiersMap.set(plan.codeChantier, {
+        code: plan.codeChantier,
+        nom: plan.nomChantier
+      });
+    }
+  });
+
+  return Array.from(chantiersMap.values());
+}
+
+/**
+ * Calcule la situation mensuelle pour un chantier spécifique
+ */
+export function calculerSituationChantier(plans, codeChantier, mois, clients, config, articlesManuals = []) {
+  const moisPrecedent = getMoisPrecedent(mois);
+
+  // Filtrer les plans du chantier
+  const plansChantier = plans.filter(p => p.codeChantier === codeChantier);
+  const codeClient = plansChantier.length > 0 ? plansChantier[0].codeClient : null;
+
+  // Articles manuels pour ce chantier et ce mois
+  const articlesManuelsFiltres = articlesManuals.filter(
+    a => a.codeChantier === codeChantier && a.mois === mois
+  );
+
+  const situation = {
+    mois,
+    codeChantier,
+    nomChantier: plansChantier.length > 0 ? plansChantier[0].nomChantier : codeChantier,
+    codeClient,
+    nomClient: clients[codeClient]?.nom || codeClient,
+    details: [],
+    articlesManuals: [],
+    totaux: {
+      ass: { nouveauCumul: 0, ancienCumul: 0, mois: 0 },
+      cf: { nouveauCumul: 0, ancienCumul: 0, mois: 0 },
+      ts: { nouveauCumul: 0, ancienCumul: 0, mois: 0 },
+      total: { nouveauCumul: 0, ancienCumul: 0, mois: 0 }
+    },
+    quantites: {
+      ass: { nouveauCumul: 0, ancienCumul: 0, mois: 0 },
+      cf: { nouveauCumul: 0, ancienCumul: 0, mois: 0 },
+      ts: { nouveauCumul: 0, ancienCumul: 0, mois: 0 }
+    }
+  };
+
+  for (const plan of plansChantier) {
+    const montants = calculerMontantsPlan(plan, clients, config);
+
+    const avancementAncien = calculerAvancementCumule(plan, moisPrecedent);
+    const avancementNouveau = calculerAvancementCumule(plan, mois);
+    const avancementMois = avancementNouveau - avancementAncien;
+
+    const detail = {
+      plan,
+      avancementAncien,
+      avancementMois,
+      avancementNouveau,
+      // ASS
+      poidsASSAncien: (plan.poidsASSCommande || 0) * avancementAncien / 100,
+      poidsASSMois: (plan.poidsASSCommande || 0) * avancementMois / 100,
+      poidsASSNouveau: (plan.poidsASSCommande || 0) * avancementNouveau / 100,
+      montantASSAncien: montants.montantASS * avancementAncien / 100,
+      montantASSMois: montants.montantASS * avancementMois / 100,
+      montantASSNouveau: montants.montantASS * avancementNouveau / 100,
+      // CF
+      poidsCFAncien: (plan.poidsCFCommande || 0) * avancementAncien / 100,
+      poidsCFMois: (plan.poidsCFCommande || 0) * avancementMois / 100,
+      poidsCFNouveau: (plan.poidsCFCommande || 0) * avancementNouveau / 100,
+      montantCFAncien: montants.montantCF * avancementAncien / 100,
+      montantCFMois: montants.montantCF * avancementMois / 100,
+      montantCFNouveau: montants.montantCF * avancementNouveau / 100,
+      // Total
+      montantTotalAncien: montants.montantTotal * avancementAncien / 100,
+      montantTotalMois: montants.montantTotal * avancementMois / 100,
+      montantTotalNouveau: montants.montantTotal * avancementNouveau / 100,
+    };
+
+    situation.details.push(detail);
+
+    // Totaux ASS
+    situation.totaux.ass.ancienCumul += detail.montantASSAncien;
+    situation.totaux.ass.mois += detail.montantASSMois;
+    situation.totaux.ass.nouveauCumul += detail.montantASSNouveau;
+    situation.quantites.ass.ancienCumul += detail.poidsASSAncien;
+    situation.quantites.ass.mois += detail.poidsASSMois;
+    situation.quantites.ass.nouveauCumul += detail.poidsASSNouveau;
+
+    // Totaux CF
+    situation.totaux.cf.ancienCumul += detail.montantCFAncien;
+    situation.totaux.cf.mois += detail.montantCFMois;
+    situation.totaux.cf.nouveauCumul += detail.montantCFNouveau;
+    situation.quantites.cf.ancienCumul += detail.poidsCFAncien;
+    situation.quantites.cf.mois += detail.poidsCFMois;
+    situation.quantites.cf.nouveauCumul += detail.poidsCFNouveau;
+
+    // Total général
+    situation.totaux.total.ancienCumul += detail.montantTotalAncien;
+    situation.totaux.total.mois += detail.montantTotalMois;
+    situation.totaux.total.nouveauCumul += detail.montantTotalNouveau;
+  }
+
+  // Ajouter les articles manuels
+  for (const article of articlesManuelsFiltres) {
+    situation.articlesManuals.push(article);
+    situation.totaux.total.mois += article.montant || 0;
+    situation.totaux.total.nouveauCumul += article.montant || 0;
+  }
+
+  // Calcul HT et TTC
+  situation.totalHT = {
+    nouveauCumul: situation.totaux.total.nouveauCumul,
+    ancienCumul: situation.totaux.total.ancienCumul,
+    mois: situation.totaux.total.mois
+  };
+
+  const tauxTVA = config.tva / 100;
+  situation.tva = {
+    nouveauCumul: situation.totalHT.nouveauCumul * tauxTVA,
+    ancienCumul: situation.totalHT.ancienCumul * tauxTVA,
+    mois: situation.totalHT.mois * tauxTVA
+  };
+
+  situation.totalTTC = {
+    nouveauCumul: situation.totalHT.nouveauCumul * (1 + tauxTVA),
+    ancienCumul: situation.totalHT.ancienCumul * (1 + tauxTVA),
+    mois: situation.totalHT.mois * (1 + tauxTVA)
+  };
+
+  return situation;
+}
+
+/**
+ * Retourne tous les chantiers avec leurs infos
+ */
+export function getAllChantiers(plans) {
+  const chantiersMap = new Map();
+
+  plans.forEach(plan => {
+    if (plan.codeChantier && !chantiersMap.has(plan.codeChantier)) {
+      chantiersMap.set(plan.codeChantier, {
+        code: plan.codeChantier,
+        nom: plan.nomChantier,
+        codeClient: plan.codeClient,
+        nomClient: plan.nomClient
+      });
+    }
+  });
+
+  return Array.from(chantiersMap.values());
+}
+
+/**
  * Calcule les statistiques globales
  */
 export function calculerStatistiquesGlobales(plans, clients, config) {

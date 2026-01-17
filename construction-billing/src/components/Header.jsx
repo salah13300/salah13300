@@ -5,7 +5,9 @@ export default function Header({ currentView, setCurrentView }) {
     { id: 'dashboard', label: 'Tableau de bord' },
     { id: 'import', label: 'Import Excel' },
     { id: 'plans', label: 'Plans' },
-    { id: 'situation', label: 'Situation Mensuelle' },
+    { id: 'situation', label: 'Situation Client' },
+    { id: 'situationChantier', label: 'Situation Chantier' },
+    { id: 'negoce', label: 'Négoce' },
     { id: 'analyse', label: 'Analyse Financière' },
     { id: 'config', label: 'Configuration' },
   ];

@@ -5,8 +5,11 @@ const ChantierContext = createContext();
 const initialState = {
   plans: [], // Liste des plans (HA ASS, HA CF, TS)
   clients: {}, // Prix par client : { "BATARM": { prixASS: 1.50, prixCF: 1.80, prixTS: 8.00 }, ... }
+  articlesManuals: [], // Articles ajoutés manuellement aux situations
+  negoce: [], // Articles de négoce
   currentMonth: new Date().toISOString().slice(0, 7), // YYYY-MM
   currentClient: null, // Client sélectionné pour la situation
+  currentChantier: null, // Chantier sélectionné pour filtrage
   config: {
     // Prix par défaut (utilisés si pas de prix client spécifique)
     prixASSDefaut: 1.50, // Prix de vente ASS par kg
@@ -77,6 +80,54 @@ function chantierReducer(state, action) {
 
     case 'SET_CURRENT_CLIENT':
       return { ...state, currentClient: action.payload };
+
+    case 'SET_CURRENT_CHANTIER':
+      return { ...state, currentChantier: action.payload };
+
+    case 'ADD_ARTICLE_MANUAL': {
+      const newArticle = {
+        ...action.payload,
+        id: `manual-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        type: 'manual',
+      };
+      return { ...state, articlesManuals: [...state.articlesManuals, newArticle] };
+    }
+
+    case 'UPDATE_ARTICLE_MANUAL':
+      return {
+        ...state,
+        articlesManuals: state.articlesManuals.map(a =>
+          a.id === action.payload.id ? { ...a, ...action.payload } : a
+        )
+      };
+
+    case 'DELETE_ARTICLE_MANUAL':
+      return {
+        ...state,
+        articlesManuals: state.articlesManuals.filter(a => a.id !== action.payload)
+      };
+
+    case 'ADD_NEGOCE': {
+      const newNegoce = {
+        ...action.payload,
+        id: `negoce-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      };
+      return { ...state, negoce: [...state.negoce, newNegoce] };
+    }
+
+    case 'UPDATE_NEGOCE':
+      return {
+        ...state,
+        negoce: state.negoce.map(n =>
+          n.id === action.payload.id ? { ...n, ...action.payload } : n
+        )
+      };
+
+    case 'DELETE_NEGOCE':
+      return {
+        ...state,
+        negoce: state.negoce.filter(n => n.id !== action.payload)
+      };
 
     case 'UPDATE_CLIENT_PRIX':
       return {

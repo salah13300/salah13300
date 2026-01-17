@@ -1207,6 +1207,255 @@ body {
   }
 }
 
+/* Client Selector */
+.client-selector,
+.chantier-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--surface);
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+}
+
+.client-selector select,
+.chantier-selector select {
+  border: none;
+  background: transparent;
+  font-size: 0.875rem;
+  cursor: pointer;
+  min-width: 150px;
+}
+
+.filters-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--surface);
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+}
+
+.filter-group select {
+  border: none;
+  background: transparent;
+  font-size: 0.875rem;
+  cursor: pointer;
+  min-width: 150px;
+}
+
+/* Situation Chantier */
+.situation-chantier h2,
+.situation-mensuelle h2 {
+  margin-bottom: 0;
+}
+
+.situation-info {
+  background: var(--surface);
+  padding: 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.situation-info p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--primary-color);
+  color: var(--primary-color);
+}
+
+.btn-outline:hover {
+  background: var(--primary-color);
+  color: white;
+}
+
+.manual-article {
+  background: #fef3c7;
+}
+
+.manual-article td {
+  position: relative;
+}
+
+.manual-article .btn-icon {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Modal large */
+.modal-large {
+  max-width: 700px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.modal-header h3 {
+  margin: 0;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.form-grid .form-group.full-width {
+  grid-column: span 2;
+}
+
+.form-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.form-row .form-group {
+  flex: 1;
+}
+
+/* Negoce */
+.negoce h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0;
+}
+
+.negoce-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.negoce-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.negoce-summary {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.negoce-summary .summary-value.positive {
+  color: var(--success-color);
+}
+
+.negoce-summary .summary-value.negative {
+  color: var(--danger-color);
+}
+
+.negoce-table-container {
+  background: var(--surface);
+  border-radius: 0.75rem;
+  overflow-x: auto;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.negoce-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.negoce-table th,
+.negoce-table td {
+  padding: 0.625rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.negoce-table th {
+  background: var(--background);
+  font-weight: 600;
+  text-align: left;
+}
+
+.negoce-table td.amount {
+  text-align: right;
+  font-family: monospace;
+}
+
+.negoce-table td.positive {
+  color: var(--success-color);
+}
+
+.negoce-table td.negative {
+  color: var(--danger-color);
+}
+
+.negoce-table td.actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.negoce-table tfoot tr.total {
+  background: var(--background);
+  font-weight: 600;
+}
+
+.negoce-table .empty-state {
+  padding: 3rem;
+}
+
+/* Badge */
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.badge-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge-info {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+/* Button danger icon */
+.btn-icon.btn-danger {
+  color: var(--danger-color);
+}
+
+.btn-icon.btn-danger:hover {
+  background: #fef2f2;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .header {

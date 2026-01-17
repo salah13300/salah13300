@@ -5,6 +5,8 @@ import Dashboard from './components/Dashboard';
 import ExcelImport from './components/ExcelImport';
 import PlansManager from './components/PlansManager';
 import SituationMensuelle from './components/SituationMensuelle';
+import SituationChantier from './components/SituationChantier';
+import Negoce from './components/Negoce';
 import AnalyseFinanciere from './components/AnalyseFinanciere';
 import Configuration from './components/Configuration';
 import './App.css';
@@ -22,6 +24,10 @@ function App() {
         return <PlansManager />;
       case 'situation':
         return <SituationMensuelle />;
+      case 'situationChantier':
+        return <SituationChantier />;
+      case 'negoce':
+        return <Negoce />;
       case 'analyse':
         return <AnalyseFinanciere />;
       case 'config':
