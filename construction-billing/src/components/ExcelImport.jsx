@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useChantier } from '../context/ChantierContext';
-import { parseExcelFile, generateTemplate } from '../utils/excelParser';
-import { Upload, Download, FileSpreadsheet, CheckCircle, AlertCircle } from 'lucide-react';
+import { parseExcelFile, generateTemplate, generateTemplateTS } from '../utils/excelParser';
+import { Upload, Download, FileSpreadsheet, CheckCircle, AlertCircle, Grid3x3 } from 'lucide-react';
 
 export default function ExcelImport() {
   const { dispatch } = useChantier();
@@ -84,7 +84,11 @@ export default function ExcelImport() {
       <div className="import-actions">
         <button className="btn btn-secondary" onClick={generateTemplate}>
           <Download size={18} />
-          Télécharger le template
+          Template HA (ASS/CF)
+        </button>
+        <button className="btn btn-secondary" onClick={generateTemplateTS}>
+          <Grid3x3 size={18} />
+          Template Treillis Soudés (kg)
         </button>
       </div>
 
@@ -171,15 +175,31 @@ export default function ExcelImport() {
 
       <div className="import-help">
         <h3><FileSpreadsheet size={20} /> Format attendu du fichier Excel</h3>
-        <p>Le fichier Excel doit contenir les colonnes suivantes :</p>
+
+        <h4>Pour les plans HA (Acier) :</h4>
         <ul>
-          <li><strong>Numéro Plan</strong> ou <strong>N° Plan</strong> : Identifiant unique du plan</li>
-          <li><strong>Désignation</strong> ou <strong>Description</strong> : Description du plan</li>
-          <li><strong>Type</strong> : HA (acier) ou TS (treillis soudé)</li>
-          <li><strong>Poids (kg)</strong> : Pour les plans HA</li>
-          <li><strong>Surface (m²)</strong> : Pour les plans TS</li>
-          <li><strong>Date Livraison</strong> : Date de livraison prévue</li>
+          <li><strong>Code</strong> : Code unique du plan</li>
+          <li><strong>Code chantier / Code client / Nom client / Nom chantier</strong></li>
+          <li><strong>No/ind. plan</strong> : Numéro et indice du plan</li>
+          <li><strong>Désignation</strong> : Description du plan</li>
+          <li><strong>Poids ASS commandé</strong> : Poids acier standard (kg)</li>
+          <li><strong>Poids CF commandé</strong> : Poids acier coupé/façonné (kg)</li>
+          <li><strong>Usine / Date prévue / BL. No</strong></li>
+          <li><strong>Poids ASS facturé / Poids CF facturé</strong></li>
         </ul>
+
+        <h4>Pour les Treillis Soudés (TS) :</h4>
+        <ul>
+          <li><strong>Code / Code chantier / Code client / Nom client / Nom chantier</strong></li>
+          <li><strong>No/ind. plan</strong> : Numéro et indice du plan</li>
+          <li><strong>Désignation</strong> : Description</li>
+          <li><strong>Référence TS</strong> : Référence du treillis (ST25C, ST35C...)</li>
+          <li><strong>Poids TS commandé</strong> : Poids treillis soudé (kg)</li>
+          <li><strong>Usine / Date prévue / BL. No</strong></li>
+          <li><strong>Poids TS facturé</strong></li>
+        </ul>
+
+        <p><strong>Note :</strong> Utilisez les boutons ci-dessus pour télécharger les templates Excel avec des exemples.</p>
       </div>
     </div>
   );

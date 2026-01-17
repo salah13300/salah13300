@@ -42,9 +42,12 @@ export function parseExcelFile(file) {
             poidsASSFacture: getNumber(row, ['Poids ASS facturé', 'Poids ASS facture']),
             poidsCFFacture: getNumber(row, ['Poids CF facturé', 'Poids CF facture']),
 
-            // Pour treillis soudés
+            // Pour treillis soudés (en kg)
+            poidsTS: getNumber(row, ['Poids TS', 'Poids Treillis', 'Poids TS commandé', 'Poids TS commande']),
+            poidsTSFacture: getNumber(row, ['Poids TS facturé', 'Poids TS facture']),
             surfaceTS: getNumber(row, ['Surface', 'Surface (m²)']),
             quantiteTS: getNumber(row, ['Quantité', 'Qté']),
+            referenceTS: getString(row, ['Référence TS', 'Ref TS', 'Reference']),
 
             type: 'HA', // Sera mis à jour si c'est un TS
             moisImport: new Date().toISOString().slice(0, 7),
@@ -52,14 +55,14 @@ export function parseExcelFile(file) {
           };
 
           // Détection du type
-          if (plan.surfaceTS > 0 || plan.quantiteTS > 0) {
+          if (plan.poidsTS > 0 || plan.surfaceTS > 0 || plan.quantiteTS > 0) {
             plan.type = 'TS';
           }
 
           return plan;
         }).filter(plan =>
           plan.numeroPlan &&
-          (plan.poidsASSCommande > 0 || plan.poidsCFCommande > 0 || plan.surfaceTS > 0 || plan.quantiteTS > 0)
+          (plan.poidsASSCommande > 0 || plan.poidsCFCommande > 0 || plan.poidsTS > 0 || plan.surfaceTS > 0 || plan.quantiteTS > 0)
         );
 
         resolve(plans);
@@ -178,4 +181,80 @@ export function generateTemplate() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Plans HA');
   XLSX.writeFile(wb, 'template_plans_ha.xlsx');
+}
+
+/**
+ * Génère un fichier Excel template pour les treillis soudés (en kg)
+ */
+export function generateTemplateTS() {
+  const template = [
+    {
+      'Code': 'BATCRE-TS-001',
+      'Code chantier': 'BATCRE',
+      'Code client': 'BATARM',
+      'Nom client': 'BATI ARMA CRETEIL',
+      'Nom chantier': 'BATI ARMA CRETEIL',
+      'No/ind. plan': 'TS-145.1 / A',
+      'Désignation': 'ZONE 1 PH.RDC DALLAGE',
+      'Référence TS': 'ST25C',
+      'Poids TS commandé': 2500.00,
+      'Usine': 'ARMASEINE',
+      'Date prévue': '15-01-2026',
+      'BL. No': '2601050',
+      'Poids TS facturé': 2520.50
+    },
+    {
+      'Code': 'BATCRE-TS-002',
+      'Code chantier': 'BATCRE',
+      'Code client': 'BATARM',
+      'Nom client': 'BATI ARMA CRETEIL',
+      'Nom chantier': 'BATI ARMA CRETEIL',
+      'No/ind. plan': 'TS-145.2 / A',
+      'Désignation': 'ZONE 2 PH.E+1 PLANCHER',
+      'Référence TS': 'ST35C',
+      'Poids TS commandé': 1800.00,
+      'Usine': 'ARMASEINE',
+      'Date prévue': '20-01-2026',
+      'BL. No': '2601055',
+      'Poids TS facturé': 1825.75
+    },
+    {
+      'Code': 'ANGLEV-TS-001',
+      'Code chantier': 'ANGLEV',
+      'Code client': 'ANGEVI',
+      'Nom client': 'ANGEVIN ILE DE FRANCE',
+      'Nom chantier': 'ANGEVIN LEVALLOIS-PERRET',
+      'No/ind. plan': 'TS-PH2-SSOL',
+      'Désignation': 'S/SOL VOILE V2',
+      'Référence TS': 'ST50C',
+      'Poids TS commandé': 3200.00,
+      'Usine': 'STEEL INDUSTRIE',
+      'Date prévue': '10-12-2025',
+      'BL. No': '2512065',
+      'Poids TS facturé': 3210.25
+    }
+  ];
+
+  const ws = XLSX.utils.json_to_sheet(template);
+
+  // Ajuster la largeur des colonnes
+  ws['!cols'] = [
+    { wch: 15 }, // Code
+    { wch: 12 }, // Code chantier
+    { wch: 12 }, // Code client
+    { wch: 25 }, // Nom client
+    { wch: 30 }, // Nom chantier
+    { wch: 15 }, // No/ind. plan
+    { wch: 30 }, // Désignation
+    { wch: 12 }, // Référence TS
+    { wch: 18 }, // Poids TS commandé
+    { wch: 15 }, // Usine
+    { wch: 12 }, // Date prévue
+    { wch: 10 }, // BL. No
+    { wch: 16 }, // Poids TS facturé
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Treillis Soudés (kg)');
+  XLSX.writeFile(wb, 'template_treillis_soudes.xlsx');
 }

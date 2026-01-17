@@ -1612,6 +1612,53 @@ body {
   margin-top: 1rem;
 }
 
+.form-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+
+.form-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #d97706;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+
+.multi-select {
+  min-height: 120px;
+  width: 100%;
+}
+
+.multi-select option {
+  padding: 0.5rem;
+}
+
+.multi-select option:checked {
+  background: var(--primary-color);
+  color: white;
+}
+
+.selected-count {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
 .rh-table {
   width: 100%;
   border-collapse: collapse;

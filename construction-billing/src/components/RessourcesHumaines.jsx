@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useChantier } from '../context/ChantierContext';
 import { formatEuros, formatNumber, getClientsUniques, getChantiersParClient, getAllChantiers } from '../utils/calculations';
-import { Users, Plus, Trash2, Edit2, Save, X, FileDown, UserPlus, Building, Calendar, Car, Receipt } from 'lucide-react';
+import { Users, Plus, Trash2, Edit2, Save, X, FileDown, UserPlus, Building, Calendar, Car, Receipt, AlertCircle, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 export default function RessourcesHumaines() {
@@ -13,6 +13,7 @@ export default function RessourcesHumaines() {
   const [editingId, setEditingId] = useState(null);
   const [filterChantier, setFilterChantier] = useState('');
   const [filterMois, setFilterMois] = useState(currentMonth);
+  const [formError, setFormError] = useState('');
 
   // Formulaires
   const [salarieForm, setSalarieForm] = useState({
@@ -20,7 +21,8 @@ export default function RessourcesHumaines() {
   });
 
   const [affectationForm, setAffectationForm] = useState({
-    salarieId: '', codeChantier: '', mois: currentMonth, heures: 0, fraisKm: 0
+    salariesIds: [], // Multiple salariés
+    codeChantier: '', mois: currentMonth, heures: 0, fraisKm: 0
   });
 
   const [noteFraisForm, setNoteFraisForm] = useState({
@@ -97,18 +99,41 @@ export default function RessourcesHumaines() {
   };
 
   const handleAddAffectation = () => {
-    if (!affectationForm.salarieId || !affectationForm.codeChantier) return;
+    setFormError('');
 
     if (editingId) {
-      dispatch({ type: 'UPDATE_AFFECTATION', payload: { id: editingId, ...affectationForm } });
+      // Mode édition: un seul salarié
+      const salarieId = affectationForm.salariesIds[0] || affectationForm.salarieId;
+      if (!salarieId || !affectationForm.codeChantier) {
+        setFormError('Veuillez sélectionner un salarié et un chantier');
+        return;
+      }
+      dispatch({ type: 'UPDATE_AFFECTATION', payload: { id: editingId, salarieId, codeChantier: affectationForm.codeChantier, mois: affectationForm.mois, heures: affectationForm.heures, fraisKm: affectationForm.fraisKm } });
     } else {
-      dispatch({ type: 'ADD_AFFECTATION', payload: affectationForm });
+      // Mode création: plusieurs salariés possibles
+      if (affectationForm.salariesIds.length === 0 || !affectationForm.codeChantier) {
+        setFormError('Veuillez sélectionner au moins un salarié et un chantier');
+        return;
+      }
+      // Créer une affectation pour chaque salarié sélectionné
+      affectationForm.salariesIds.forEach(salarieId => {
+        dispatch({ type: 'ADD_AFFECTATION', payload: { salarieId, codeChantier: affectationForm.codeChantier, mois: affectationForm.mois, heures: affectationForm.heures, fraisKm: affectationForm.fraisKm } });
+      });
     }
     resetAffectationForm();
   };
 
   const handleAddNoteFrais = () => {
-    if (!noteFraisForm.salarieId || !noteFraisForm.description) return;
+    setFormError('');
+
+    if (!noteFraisForm.salarieId) {
+      setFormError('Veuillez sélectionner un salarié');
+      return;
+    }
+    if (!noteFraisForm.description) {
+      setFormError('Veuillez entrer une description');
+      return;
+    }
 
     if (editingId) {
       dispatch({ type: 'UPDATE_NOTE_FRAIS', payload: { id: editingId, ...noteFraisForm } });
@@ -122,18 +147,21 @@ export default function RessourcesHumaines() {
     setSalarieForm({ nom: '', prenom: '', fonction: '', tauxHoraire: 0, email: '', telephone: '' });
     setShowForm(false);
     setEditingId(null);
+    setFormError('');
   };
 
   const resetAffectationForm = () => {
-    setAffectationForm({ salarieId: '', codeChantier: '', mois: currentMonth, heures: 0, fraisKm: 0 });
+    setAffectationForm({ salariesIds: [], codeChantier: '', mois: currentMonth, heures: 0, fraisKm: 0 });
     setShowForm(false);
     setEditingId(null);
+    setFormError('');
   };
 
   const resetNoteFraisForm = () => {
     setNoteFraisForm({ salarieId: '', codeChantier: '', mois: currentMonth, description: '', montant: 0, type: 'deplacement' });
     setShowForm(false);
     setEditingId(null);
+    setFormError('');
   };
 
   const editSalarie = (s) => {
@@ -143,9 +171,10 @@ export default function RessourcesHumaines() {
   };
 
   const editAffectation = (a) => {
-    setAffectationForm({ salarieId: a.salarieId, codeChantier: a.codeChantier, mois: a.mois, heures: a.heures, fraisKm: a.fraisKm || 0 });
+    setAffectationForm({ salariesIds: [a.salarieId], salarieId: a.salarieId, codeChantier: a.codeChantier, mois: a.mois, heures: a.heures, fraisKm: a.fraisKm || 0 });
     setEditingId(a.id);
     setShowForm(true);
+    setFormError('');
   };
 
   const editNoteFrais = (n) => {
@@ -349,22 +378,60 @@ export default function RessourcesHumaines() {
           {showForm && (
             <div className="form-card">
               <h3>{editingId ? 'Modifier affectation' : 'Nouvelle affectation'}</h3>
+              {formError && (
+                <div className="form-error">
+                  <AlertCircle size={16} /> {formError}
+                </div>
+              )}
+              {salaries.length === 0 && (
+                <div className="form-warning">
+                  <AlertCircle size={16} /> Aucun salarié enregistré. Veuillez d'abord ajouter des salariés dans l'onglet "Salariés".
+                </div>
+              )}
+              {chantiers.length === 0 && (
+                <div className="form-warning">
+                  <AlertCircle size={16} /> Aucun chantier disponible. Veuillez d'abord importer des plans.
+                </div>
+              )}
               <div className="form-grid">
-                <div className="form-group">
-                  <label>Salarié *</label>
-                  <select value={affectationForm.salarieId} onChange={(e) => setAffectationForm({ ...affectationForm, salarieId: e.target.value })}>
-                    <option value="">Sélectionner</option>
-                    {salaries.map(s => (
-                      <option key={s.id} value={s.id}>{s.prenom} {s.nom}</option>
-                    ))}
-                  </select>
+                <div className="form-group full-width">
+                  <label>{editingId ? 'Salarié *' : 'Salariés * (sélection multiple avec Ctrl+clic)'}</label>
+                  {editingId ? (
+                    <select
+                      value={affectationForm.salariesIds[0] || ''}
+                      onChange={(e) => setAffectationForm({ ...affectationForm, salariesIds: [e.target.value] })}
+                    >
+                      <option value="">Sélectionner</option>
+                      {salaries.map(s => (
+                        <option key={s.id} value={s.id}>{s.prenom} {s.nom}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select
+                      multiple
+                      size={Math.min(salaries.length + 1, 6)}
+                      value={affectationForm.salariesIds}
+                      onChange={(e) => {
+                        const selected = Array.from(e.target.selectedOptions, option => option.value);
+                        setAffectationForm({ ...affectationForm, salariesIds: selected });
+                      }}
+                      className="multi-select"
+                    >
+                      {salaries.map(s => (
+                        <option key={s.id} value={s.id}>{s.prenom} {s.nom} ({s.fonction || 'N/A'})</option>
+                      ))}
+                    </select>
+                  )}
+                  {!editingId && affectationForm.salariesIds.length > 0 && (
+                    <small className="selected-count">{affectationForm.salariesIds.length} salarié(s) sélectionné(s)</small>
+                  )}
                 </div>
                 <div className="form-group">
                   <label>Chantier *</label>
                   <select value={affectationForm.codeChantier} onChange={(e) => setAffectationForm({ ...affectationForm, codeChantier: e.target.value })}>
                     <option value="">Sélectionner</option>
                     {chantiers.map(ch => (
-                      <option key={ch.code} value={ch.code}>{ch.nom || ch.code}</option>
+                      <option key={ch.code} value={ch.code}>{ch.nom || ch.code} - {ch.nomClient}</option>
                     ))}
                   </select>
                 </div>
@@ -383,8 +450,12 @@ export default function RessourcesHumaines() {
               </div>
               <div className="form-actions">
                 <button className="btn btn-secondary" onClick={resetAffectationForm}>Annuler</button>
-                <button className="btn btn-primary" onClick={handleAddAffectation}>
-                  <Save size={18} /> {editingId ? 'Modifier' : 'Ajouter'}
+                <button
+                  className="btn btn-primary"
+                  onClick={handleAddAffectation}
+                  disabled={salaries.length === 0 || chantiers.length === 0}
+                >
+                  <Save size={18} /> {editingId ? 'Modifier' : `Ajouter ${affectationForm.salariesIds.length > 1 ? `(${affectationForm.salariesIds.length})` : ''}`}
                 </button>
               </div>
             </div>
@@ -451,6 +522,16 @@ export default function RessourcesHumaines() {
           {showForm && (
             <div className="form-card">
               <h3>{editingId ? 'Modifier note de frais' : 'Nouvelle note de frais'}</h3>
+              {formError && (
+                <div className="form-error">
+                  <AlertCircle size={16} /> {formError}
+                </div>
+              )}
+              {salaries.length === 0 && (
+                <div className="form-warning">
+                  <AlertCircle size={16} /> Aucun salarié enregistré. Veuillez d'abord ajouter des salariés dans l'onglet "Salariés".
+                </div>
+              )}
               <div className="form-grid">
                 <div className="form-group">
                   <label>Salarié *</label>
@@ -466,7 +547,7 @@ export default function RessourcesHumaines() {
                   <select value={noteFraisForm.codeChantier} onChange={(e) => setNoteFraisForm({ ...noteFraisForm, codeChantier: e.target.value })}>
                     <option value="">Général (non affecté)</option>
                     {chantiers.map(ch => (
-                      <option key={ch.code} value={ch.code}>{ch.nom || ch.code}</option>
+                      <option key={ch.code} value={ch.code}>{ch.nom || ch.code} - {ch.nomClient}</option>
                     ))}
                   </select>
                 </div>
@@ -486,7 +567,7 @@ export default function RessourcesHumaines() {
                 </div>
                 <div className="form-group full-width">
                   <label>Description *</label>
-                  <input type="text" value={noteFraisForm.description} onChange={(e) => setNoteFraisForm({ ...noteFraisForm, description: e.target.value })} />
+                  <input type="text" value={noteFraisForm.description} onChange={(e) => setNoteFraisForm({ ...noteFraisForm, description: e.target.value })} placeholder="Ex: Frais péage autoroute" />
                 </div>
                 <div className="form-group">
                   <label>Montant (€)</label>
@@ -495,7 +576,11 @@ export default function RessourcesHumaines() {
               </div>
               <div className="form-actions">
                 <button className="btn btn-secondary" onClick={resetNoteFraisForm}>Annuler</button>
-                <button className="btn btn-primary" onClick={handleAddNoteFrais}>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleAddNoteFrais}
+                  disabled={salaries.length === 0}
+                >
                   <Save size={18} /> {editingId ? 'Modifier' : 'Ajouter'}
                 </button>
               </div>
