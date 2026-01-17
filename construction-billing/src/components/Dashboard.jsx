@@ -1,20 +1,13 @@
 import { useChantier } from '../context/ChantierContext';
-import { calculerSituation, formatEuros, formatNumber } from '../utils/calculations';
-import { TrendingUp, TrendingDown, FileText, Package, Calendar } from 'lucide-react';
+import { calculerStatistiquesGlobales, formatEuros, formatNumber, getClientsUniques } from '../utils/calculations';
+import { FileText, Package, Users, Calendar } from 'lucide-react';
 
 export default function Dashboard() {
-  const { state } = useChantier();
-  const { plans, currentMonth, config } = state;
+  const { state, dispatch } = useChantier();
+  const { plans, clients, currentMonth, config } = state;
 
-  const situation = calculerSituation(plans, currentMonth, config);
-
-  const plansHA = plans.filter(p => p.type === 'HA');
-  const plansTS = plans.filter(p => p.type === 'TS');
-
-  const totalPoidsHA = plansHA.reduce((sum, p) => sum + p.poidsKg, 0);
-  const totalSurfaceTS = plansTS.reduce((sum, p) => sum + p.surfaceM2, 0);
-
-  const isGain = situation.resultat.mois >= 0;
+  const stats = calculerStatistiquesGlobales(plans, clients, config);
+  const listeClients = getClientsUniques(plans);
 
   return (
     <div className="dashboard">
@@ -26,18 +19,18 @@ export default function Dashboard() {
             <FileText size={24} />
           </div>
           <div className="stat-content">
-            <span className="stat-value">{plans.length}</span>
+            <span className="stat-value">{stats.nbPlans}</span>
             <span className="stat-label">Plans totaux</span>
           </div>
         </div>
 
         <div className="stat-card">
           <div className="stat-icon">
-            <Package size={24} />
+            <Users size={24} />
           </div>
           <div className="stat-content">
-            <span className="stat-value">{formatNumber(totalPoidsHA, 0)} kg</span>
-            <span className="stat-label">Acier HA ({plansHA.length} plans)</span>
+            <span className="stat-value">{listeClients.length}</span>
+            <span className="stat-label">Clients</span>
           </div>
         </div>
 
@@ -46,66 +39,51 @@ export default function Dashboard() {
             <Package size={24} />
           </div>
           <div className="stat-content">
-            <span className="stat-value">{formatNumber(totalSurfaceTS, 0)} m²</span>
-            <span className="stat-label">Treillis soudés ({plansTS.length} plans)</span>
+            <span className="stat-value">{formatNumber(stats.totalPoidsASS, 0)} kg</span>
+            <span className="stat-label">Acier ASS</span>
           </div>
         </div>
 
-        <div className={`stat-card ${isGain ? 'positive' : 'negative'}`}>
+        <div className="stat-card">
           <div className="stat-icon">
-            {isGain ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
+            <Package size={24} />
           </div>
           <div className="stat-content">
-            <span className="stat-value">{formatEuros(situation.resultat.mois)}</span>
-            <span className="stat-label">Résultat du mois</span>
+            <span className="stat-value">{formatNumber(stats.totalPoidsCF, 0)} kg</span>
+            <span className="stat-label">Acier CF</span>
           </div>
         </div>
       </div>
 
       <div className="dashboard-summary">
-        <h3>Résumé Situation Mensuelle</h3>
-        <table className="summary-table">
-          <thead>
-            <tr>
-              <th></th>
-              <th>Cumul Antérieur</th>
-              <th>Mois en cours</th>
-              <th>Nouveau Cumul</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>Chiffre d'affaires</strong></td>
-              <td>{formatEuros(situation.totaux.total.cumulAnt)}</td>
-              <td>{formatEuros(situation.totaux.total.mois)}</td>
-              <td>{formatEuros(situation.totaux.total.cumulNouveau)}</td>
-            </tr>
-            <tr className="sub-row">
-              <td>- Acier HA</td>
-              <td>{formatEuros(situation.totaux.ha.cumulAnt)}</td>
-              <td>{formatEuros(situation.totaux.ha.mois)}</td>
-              <td>{formatEuros(situation.totaux.ha.cumulNouveau)}</td>
-            </tr>
-            <tr className="sub-row">
-              <td>- Treillis soudés</td>
-              <td>{formatEuros(situation.totaux.ts.cumulAnt)}</td>
-              <td>{formatEuros(situation.totaux.ts.mois)}</td>
-              <td>{formatEuros(situation.totaux.ts.cumulNouveau)}</td>
-            </tr>
-            <tr>
-              <td><strong>Coûts</strong></td>
-              <td>{formatEuros(situation.couts.total.cumulAnt)}</td>
-              <td>{formatEuros(situation.couts.total.mois)}</td>
-              <td>{formatEuros(situation.couts.total.cumulNouveau)}</td>
-            </tr>
-            <tr className={`result-row ${isGain ? 'positive' : 'negative'}`}>
-              <td><strong>Résultat (Marge)</strong></td>
-              <td>{formatEuros(situation.resultat.cumulAnt)}</td>
-              <td>{formatEuros(situation.resultat.mois)}</td>
-              <td>{formatEuros(situation.resultat.cumulNouveau)}</td>
-            </tr>
-          </tbody>
-        </table>
+        <h3>Montant total commandé</h3>
+        <div className="big-number">
+          {formatEuros(stats.totalMontant)}
+        </div>
+      </div>
+
+      <div className="dashboard-clients">
+        <h3>Clients ({listeClients.length})</h3>
+        <div className="clients-grid">
+          {listeClients.slice(0, 8).map(client => {
+            const plansClient = plans.filter(p => p.codeClient === client.code);
+            const poidsTotal = plansClient.reduce((sum, p) =>
+              sum + (p.poidsASSCommande || 0) + (p.poidsCFCommande || 0), 0
+            );
+            return (
+              <div key={client.code} className="client-card">
+                <div className="client-name">{client.nom || client.code}</div>
+                <div className="client-stats">
+                  <span>{plansClient.length} plans</span>
+                  <span>{formatNumber(poidsTotal, 0)} kg</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {listeClients.length > 8 && (
+          <p className="more-clients">+ {listeClients.length - 8} autres clients</p>
+        )}
       </div>
 
       <div className="month-selector">
@@ -114,7 +92,7 @@ export default function Dashboard() {
         <input
           type="month"
           value={currentMonth}
-          onChange={(e) => state.dispatch?.({ type: 'SET_CURRENT_MONTH', payload: e.target.value })}
+          onChange={(e) => dispatch({ type: 'SET_CURRENT_MONTH', payload: e.target.value })}
         />
       </div>
     </div>

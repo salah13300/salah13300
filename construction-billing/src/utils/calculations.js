@@ -1,29 +1,47 @@
 /**
- * Calcule le montant total d'un plan
+ * Récupère le prix pour un client et un type donné
  */
-export function calculerMontantPlan(plan, config) {
-  if (plan.type === 'HA') {
-    return plan.poidsKg * config.prixAcierKg;
-  } else if (plan.type === 'TS') {
-    return plan.surfaceM2 * config.prixTSM2;
+export function getPrixClient(codeClient, type, clients, config) {
+  const clientPrix = clients[codeClient];
+  if (clientPrix) {
+    if (type === 'ASS') return clientPrix.prixASS || config.prixASSDefaut;
+    if (type === 'CF') return clientPrix.prixCF || config.prixCFDefaut;
+    if (type === 'TS') return clientPrix.prixTS || config.prixTSDefaut;
   }
+  // Prix par défaut
+  if (type === 'ASS') return config.prixASSDefaut;
+  if (type === 'CF') return config.prixCFDefaut;
+  if (type === 'TS') return config.prixTSDefaut;
   return 0;
 }
 
 /**
- * Calcule le coût d'achat d'un plan
+ * Calcule les montants d'un plan (ASS + CF séparément)
  */
-export function calculerCoutPlan(plan, config) {
-  if (plan.type === 'HA') {
-    return plan.poidsKg * config.prixAchatKg;
-  } else if (plan.type === 'TS') {
-    return plan.surfaceM2 * config.prixAchatTSM2;
-  }
-  return 0;
+export function calculerMontantsPlan(plan, clients, config) {
+  const prixASS = getPrixClient(plan.codeClient, 'ASS', clients, config);
+  const prixCF = getPrixClient(plan.codeClient, 'CF', clients, config);
+  const prixTS = getPrixClient(plan.codeClient, 'TS', clients, config);
+
+  return {
+    montantASS: (plan.poidsASSCommande || 0) * prixASS,
+    montantCF: (plan.poidsCFCommande || 0) * prixCF,
+    montantTS: (plan.surfaceTS || 0) * prixTS,
+    montantTotal: ((plan.poidsASSCommande || 0) * prixASS) +
+                  ((plan.poidsCFCommande || 0) * prixCF) +
+                  ((plan.surfaceTS || 0) * prixTS),
+    // Coûts
+    coutASS: (plan.poidsASSCommande || 0) * config.coutASS,
+    coutCF: (plan.poidsCFCommande || 0) * config.coutCF,
+    coutTS: (plan.surfaceTS || 0) * config.coutTS,
+    coutTotal: ((plan.poidsASSCommande || 0) * config.coutASS) +
+               ((plan.poidsCFCommande || 0) * config.coutCF) +
+               ((plan.surfaceTS || 0) * config.coutTS)
+  };
 }
 
 /**
- * Calcule l'avancement total d'un plan jusqu'à un mois donné
+ * Calcule l'avancement cumulé jusqu'à un mois donné
  */
 export function calculerAvancementCumule(plan, moisFin) {
   if (!plan.avancements) return 0;
@@ -33,7 +51,7 @@ export function calculerAvancementCumule(plan, moisFin) {
 
   for (const mois of moisTries) {
     if (mois <= moisFin) {
-      cumul = plan.avancements[mois]; // C'est cumulatif, donc on prend la dernière valeur
+      cumul = plan.avancements[mois];
     }
   }
 
@@ -41,108 +59,107 @@ export function calculerAvancementCumule(plan, moisFin) {
 }
 
 /**
- * Calcule l'avancement du mois uniquement
+ * Calcule la situation mensuelle pour un client donné
  */
-export function calculerAvancementMois(plan, mois) {
-  if (!plan.avancements || !plan.avancements[mois]) return 0;
-
-  const moisTries = Object.keys(plan.avancements).sort();
-  const indexMois = moisTries.indexOf(mois);
-
-  if (indexMois === 0) {
-    return plan.avancements[mois];
-  }
-
-  const moisPrecedent = moisTries[indexMois - 1];
-  return plan.avancements[mois] - (plan.avancements[moisPrecedent] || 0);
-}
-
-/**
- * Calcule la situation mensuelle complète
- */
-export function calculerSituation(plans, mois, config) {
+export function calculerSituationClient(plans, codeClient, mois, clients, config) {
   const moisPrecedent = getMoisPrecedent(mois);
+
+  // Filtrer les plans du client
+  const plansClient = plans.filter(p => p.codeClient === codeClient);
 
   const situation = {
     mois,
+    codeClient,
+    nomClient: clients[codeClient]?.nom || codeClient,
     details: [],
     totaux: {
-      ha: { cumulAnt: 0, mois: 0, cumulNouveau: 0 },
-      ts: { cumulAnt: 0, mois: 0, cumulNouveau: 0 },
-      total: { cumulAnt: 0, mois: 0, cumulNouveau: 0 }
+      ass: { nouveauCumul: 0, ancienCumul: 0, mois: 0 },
+      cf: { nouveauCumul: 0, ancienCumul: 0, mois: 0 },
+      ts: { nouveauCumul: 0, ancienCumul: 0, mois: 0 },
+      total: { nouveauCumul: 0, ancienCumul: 0, mois: 0 }
     },
-    couts: {
-      ha: { cumulAnt: 0, mois: 0, cumulNouveau: 0 },
-      ts: { cumulAnt: 0, mois: 0, cumulNouveau: 0 },
-      total: { cumulAnt: 0, mois: 0, cumulNouveau: 0 }
-    },
-    resultat: {
-      cumulAnt: 0,
-      mois: 0,
-      cumulNouveau: 0
+    quantites: {
+      ass: { nouveauCumul: 0, ancienCumul: 0, mois: 0 },
+      cf: { nouveauCumul: 0, ancienCumul: 0, mois: 0 },
+      ts: { nouveauCumul: 0, ancienCumul: 0, mois: 0 }
     }
   };
 
-  for (const plan of plans) {
-    const montantTotal = calculerMontantPlan(plan, config);
-    const coutTotal = calculerCoutPlan(plan, config);
+  for (const plan of plansClient) {
+    const montants = calculerMontantsPlan(plan, clients, config);
 
-    const avancementCumulAnt = calculerAvancementCumule(plan, moisPrecedent);
-    const avancementCumulNouveau = calculerAvancementCumule(plan, mois);
-    const avancementMois = avancementCumulNouveau - avancementCumulAnt;
+    const avancementAncien = calculerAvancementCumule(plan, moisPrecedent);
+    const avancementNouveau = calculerAvancementCumule(plan, mois);
+    const avancementMois = avancementNouveau - avancementAncien;
 
-    const montantCumulAnt = montantTotal * avancementCumulAnt / 100;
-    const montantMois = montantTotal * avancementMois / 100;
-    const montantCumulNouveau = montantTotal * avancementCumulNouveau / 100;
-
-    const coutCumulAnt = coutTotal * avancementCumulAnt / 100;
-    const coutMois = coutTotal * avancementMois / 100;
-    const coutCumulNouveau = coutTotal * avancementCumulNouveau / 100;
-
-    situation.details.push({
+    const detail = {
       plan,
-      montantTotal,
-      coutTotal,
-      avancementCumulAnt,
+      avancementAncien,
       avancementMois,
-      avancementCumulNouveau,
-      montantCumulAnt,
-      montantMois,
-      montantCumulNouveau,
-      coutCumulAnt,
-      coutMois,
-      coutCumulNouveau,
-      margeCumulAnt: montantCumulAnt - coutCumulAnt,
-      margeMois: montantMois - coutMois,
-      margeCumulNouveau: montantCumulNouveau - coutCumulNouveau
-    });
+      avancementNouveau,
+      // ASS
+      poidsASSAncien: (plan.poidsASSCommande || 0) * avancementAncien / 100,
+      poidsASSMois: (plan.poidsASSCommande || 0) * avancementMois / 100,
+      poidsASSNouveau: (plan.poidsASSCommande || 0) * avancementNouveau / 100,
+      montantASSAncien: montants.montantASS * avancementAncien / 100,
+      montantASSMois: montants.montantASS * avancementMois / 100,
+      montantASSNouveau: montants.montantASS * avancementNouveau / 100,
+      // CF
+      poidsCFAncien: (plan.poidsCFCommande || 0) * avancementAncien / 100,
+      poidsCFMois: (plan.poidsCFCommande || 0) * avancementMois / 100,
+      poidsCFNouveau: (plan.poidsCFCommande || 0) * avancementNouveau / 100,
+      montantCFAncien: montants.montantCF * avancementAncien / 100,
+      montantCFMois: montants.montantCF * avancementMois / 100,
+      montantCFNouveau: montants.montantCF * avancementNouveau / 100,
+      // Total
+      montantTotalAncien: montants.montantTotal * avancementAncien / 100,
+      montantTotalMois: montants.montantTotal * avancementMois / 100,
+      montantTotalNouveau: montants.montantTotal * avancementNouveau / 100,
+    };
 
-    // Totaux par type
-    const typeKey = plan.type.toLowerCase();
-    if (situation.totaux[typeKey]) {
-      situation.totaux[typeKey].cumulAnt += montantCumulAnt;
-      situation.totaux[typeKey].mois += montantMois;
-      situation.totaux[typeKey].cumulNouveau += montantCumulNouveau;
+    situation.details.push(detail);
 
-      situation.couts[typeKey].cumulAnt += coutCumulAnt;
-      situation.couts[typeKey].mois += coutMois;
-      situation.couts[typeKey].cumulNouveau += coutCumulNouveau;
-    }
+    // Totaux ASS
+    situation.totaux.ass.ancienCumul += detail.montantASSAncien;
+    situation.totaux.ass.mois += detail.montantASSMois;
+    situation.totaux.ass.nouveauCumul += detail.montantASSNouveau;
+    situation.quantites.ass.ancienCumul += detail.poidsASSAncien;
+    situation.quantites.ass.mois += detail.poidsASSMois;
+    situation.quantites.ass.nouveauCumul += detail.poidsASSNouveau;
 
-    // Totaux généraux
-    situation.totaux.total.cumulAnt += montantCumulAnt;
-    situation.totaux.total.mois += montantMois;
-    situation.totaux.total.cumulNouveau += montantCumulNouveau;
+    // Totaux CF
+    situation.totaux.cf.ancienCumul += detail.montantCFAncien;
+    situation.totaux.cf.mois += detail.montantCFMois;
+    situation.totaux.cf.nouveauCumul += detail.montantCFNouveau;
+    situation.quantites.cf.ancienCumul += detail.poidsCFAncien;
+    situation.quantites.cf.mois += detail.poidsCFMois;
+    situation.quantites.cf.nouveauCumul += detail.poidsCFNouveau;
 
-    situation.couts.total.cumulAnt += coutCumulAnt;
-    situation.couts.total.mois += coutMois;
-    situation.couts.total.cumulNouveau += coutCumulNouveau;
+    // Total général
+    situation.totaux.total.ancienCumul += detail.montantTotalAncien;
+    situation.totaux.total.mois += detail.montantTotalMois;
+    situation.totaux.total.nouveauCumul += detail.montantTotalNouveau;
   }
 
-  // Calcul du résultat (marge)
-  situation.resultat.cumulAnt = situation.totaux.total.cumulAnt - situation.couts.total.cumulAnt;
-  situation.resultat.mois = situation.totaux.total.mois - situation.couts.total.mois;
-  situation.resultat.cumulNouveau = situation.totaux.total.cumulNouveau - situation.couts.total.cumulNouveau;
+  // Calcul HT et TTC
+  situation.totalHT = {
+    nouveauCumul: situation.totaux.total.nouveauCumul,
+    ancienCumul: situation.totaux.total.ancienCumul,
+    mois: situation.totaux.total.mois
+  };
+
+  const tauxTVA = config.tva / 100;
+  situation.tva = {
+    nouveauCumul: situation.totalHT.nouveauCumul * tauxTVA,
+    ancienCumul: situation.totalHT.ancienCumul * tauxTVA,
+    mois: situation.totalHT.mois * tauxTVA
+  };
+
+  situation.totalTTC = {
+    nouveauCumul: situation.totalHT.nouveauCumul * (1 + tauxTVA),
+    ancienCumul: situation.totalHT.ancienCumul * (1 + tauxTVA),
+    mois: situation.totalHT.mois * (1 + tauxTVA)
+  };
 
   return situation;
 }
@@ -186,44 +203,67 @@ export function formatNumber(number, decimals = 2) {
 }
 
 /**
- * Génère la liste des mois disponibles à partir des plans
+ * Génère la liste des mois disponibles
  */
 export function getMoisDisponibles(plans) {
   const moisSet = new Set();
 
   plans.forEach(plan => {
     if (plan.moisImport) moisSet.add(plan.moisImport);
-    if (plan.dateLivraison) moisSet.add(plan.dateLivraison.slice(0, 7));
+    if (plan.datePrevue) moisSet.add(plan.datePrevue.slice(0, 7));
     if (plan.avancements) {
       Object.keys(plan.avancements).forEach(m => moisSet.add(m));
     }
   });
 
-  // Ajouter le mois courant
   moisSet.add(new Date().toISOString().slice(0, 7));
 
   return Array.from(moisSet).sort();
 }
 
 /**
- * Calcule l'historique des résultats par mois
+ * Retourne la liste des clients uniques
  */
-export function calculerHistoriqueResultats(plans, config) {
-  const mois = getMoisDisponibles(plans);
-  const historique = [];
+export function getClientsUniques(plans) {
+  const clientsMap = new Map();
 
-  for (const m of mois) {
-    const situation = calculerSituation(plans, m, config);
-    historique.push({
-      mois: m,
-      chiffreAffaires: situation.totaux.total.mois,
-      couts: situation.couts.total.mois,
-      marge: situation.resultat.mois,
-      margePercent: situation.totaux.total.mois > 0
-        ? (situation.resultat.mois / situation.totaux.total.mois) * 100
-        : 0
-    });
-  }
+  plans.forEach(plan => {
+    if (plan.codeClient && !clientsMap.has(plan.codeClient)) {
+      clientsMap.set(plan.codeClient, {
+        code: plan.codeClient,
+        nom: plan.nomClient
+      });
+    }
+  });
 
-  return historique;
+  return Array.from(clientsMap.values());
+}
+
+/**
+ * Calcule les statistiques globales
+ */
+export function calculerStatistiquesGlobales(plans, clients, config) {
+  let totalPoidsASS = 0;
+  let totalPoidsCF = 0;
+  let totalSurfaceTS = 0;
+  let totalMontant = 0;
+
+  plans.forEach(plan => {
+    totalPoidsASS += plan.poidsASSCommande || 0;
+    totalPoidsCF += plan.poidsCFCommande || 0;
+    totalSurfaceTS += plan.surfaceTS || 0;
+
+    const montants = calculerMontantsPlan(plan, clients, config);
+    totalMontant += montants.montantTotal;
+  });
+
+  return {
+    nbPlans: plans.length,
+    nbClients: Object.keys(clients).length,
+    totalPoidsASS,
+    totalPoidsCF,
+    totalPoidsHA: totalPoidsASS + totalPoidsCF,
+    totalSurfaceTS,
+    totalMontant
+  };
 }

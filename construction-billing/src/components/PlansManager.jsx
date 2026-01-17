@@ -1,17 +1,19 @@
 import { useState, useMemo } from 'react';
 import { useChantier } from '../context/ChantierContext';
-import { calculerMontantPlan, formatEuros, formatNumber } from '../utils/calculations';
+import { calculerMontantsPlan, formatEuros, formatNumber, getClientsUniques } from '../utils/calculations';
 import { Search, Trash2, Edit2, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function PlansManager() {
   const { state, dispatch } = useChantier();
-  const { plans, config } = state;
+  const { plans, clients, config } = state;
 
   const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState('all');
+  const [filterClient, setFilterClient] = useState('all');
   const [sortField, setSortField] = useState('numeroPlan');
   const [sortDirection, setSortDirection] = useState('asc');
   const [editingPlan, setEditingPlan] = useState(null);
+
+  const listeClients = useMemo(() => getClientsUniques(plans), [plans]);
 
   const filteredPlans = useMemo(() => {
     let result = [...plans];
@@ -20,24 +22,26 @@ export default function PlansManager() {
     if (search) {
       const searchLower = search.toLowerCase();
       result = result.filter(p =>
-        p.numeroPlan.toLowerCase().includes(searchLower) ||
-        p.designation.toLowerCase().includes(searchLower)
+        (p.numeroPlan || '').toLowerCase().includes(searchLower) ||
+        (p.designation || '').toLowerCase().includes(searchLower) ||
+        (p.nomClient || '').toLowerCase().includes(searchLower) ||
+        (p.nomChantier || '').toLowerCase().includes(searchLower)
       );
     }
 
-    // Filtre par type
-    if (filterType !== 'all') {
-      result = result.filter(p => p.type === filterType);
+    // Filtre par client
+    if (filterClient !== 'all') {
+      result = result.filter(p => p.codeClient === filterClient);
     }
 
     // Tri
     result.sort((a, b) => {
-      let aVal = a[sortField];
-      let bVal = b[sortField];
+      let aVal = a[sortField] || '';
+      let bVal = b[sortField] || '';
 
       if (typeof aVal === 'string') {
         aVal = aVal.toLowerCase();
-        bVal = bVal.toLowerCase();
+        bVal = (bVal || '').toLowerCase();
       }
 
       if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
@@ -46,7 +50,7 @@ export default function PlansManager() {
     });
 
     return result;
-  }, [plans, search, filterType, sortField, sortDirection]);
+  }, [plans, search, filterClient, sortField, sortDirection]);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -88,7 +92,7 @@ export default function PlansManager() {
           <Search size={18} />
           <input
             type="text"
-            placeholder="Rechercher un plan..."
+            placeholder="Rechercher..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -96,10 +100,11 @@ export default function PlansManager() {
 
         <div className="filter-box">
           <Filter size={18} />
-          <select value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-            <option value="all">Tous les types</option>
-            <option value="HA">Acier HA</option>
-            <option value="TS">Treillis soudés</option>
+          <select value={filterClient} onChange={(e) => setFilterClient(e.target.value)}>
+            <option value="all">Tous les clients</option>
+            {listeClients.map(c => (
+              <option key={c.code} value={c.code}>{c.nom || c.code}</option>
+            ))}
           </select>
         </div>
 
@@ -115,21 +120,17 @@ export default function PlansManager() {
               <th onClick={() => handleSort('numeroPlan')} className="sortable">
                 N° Plan <SortIcon field="numeroPlan" />
               </th>
+              <th onClick={() => handleSort('nomClient')} className="sortable">
+                Client <SortIcon field="nomClient" />
+              </th>
               <th onClick={() => handleSort('designation')} className="sortable">
                 Désignation <SortIcon field="designation" />
               </th>
-              <th onClick={() => handleSort('type')} className="sortable">
-                Type <SortIcon field="type" />
-              </th>
-              <th onClick={() => handleSort('poidsKg')} className="sortable">
-                Poids (kg) <SortIcon field="poidsKg" />
-              </th>
-              <th onClick={() => handleSort('surfaceM2')} className="sortable">
-                Surface (m²) <SortIcon field="surfaceM2" />
-              </th>
+              <th>ASS (kg)</th>
+              <th>CF (kg)</th>
               <th>Montant</th>
-              <th onClick={() => handleSort('dateLivraison')} className="sortable">
-                Livraison <SortIcon field="dateLivraison" />
+              <th onClick={() => handleSort('datePrevue')} className="sortable">
+                Date prévue <SortIcon field="datePrevue" />
               </th>
               <th>Avancement</th>
               <th>Actions</th>
@@ -137,23 +138,19 @@ export default function PlansManager() {
           </thead>
           <tbody>
             {filteredPlans.map(plan => {
-              const montant = calculerMontantPlan(plan, config);
+              const montants = calculerMontantsPlan(plan, clients, config);
               const avancementActuel = plan.avancements ?
                 Math.max(...Object.values(plan.avancements), 0) : 0;
 
               return (
                 <tr key={plan.id}>
                   <td className="plan-number">{plan.numeroPlan}</td>
-                  <td>{plan.designation}</td>
-                  <td>
-                    <span className={`type-badge ${plan.type.toLowerCase()}`}>
-                      {plan.type}
-                    </span>
-                  </td>
-                  <td>{plan.type === 'HA' ? formatNumber(plan.poidsKg, 0) : '-'}</td>
-                  <td>{plan.type === 'TS' ? formatNumber(plan.surfaceM2, 0) : '-'}</td>
-                  <td className="amount">{formatEuros(montant)}</td>
-                  <td>{plan.dateLivraison}</td>
+                  <td>{plan.nomClient || plan.codeClient}</td>
+                  <td className="designation">{plan.designation}</td>
+                  <td className="amount">{plan.poidsASSCommande > 0 ? formatNumber(plan.poidsASSCommande, 0) : '-'}</td>
+                  <td className="amount">{plan.poidsCFCommande > 0 ? formatNumber(plan.poidsCFCommande, 0) : '-'}</td>
+                  <td className="amount">{formatEuros(montants.montantTotal)}</td>
+                  <td>{plan.datePrevue}</td>
                   <td>
                     <div className="progress-bar">
                       <div
@@ -193,7 +190,7 @@ export default function PlansManager() {
               <label>N° Plan</label>
               <input
                 type="text"
-                value={editingPlan.numeroPlan}
+                value={editingPlan.numeroPlan || ''}
                 onChange={(e) => setEditingPlan({ ...editingPlan, numeroPlan: e.target.value })}
               />
             </div>
@@ -201,46 +198,34 @@ export default function PlansManager() {
               <label>Désignation</label>
               <input
                 type="text"
-                value={editingPlan.designation}
+                value={editingPlan.designation || ''}
                 onChange={(e) => setEditingPlan({ ...editingPlan, designation: e.target.value })}
               />
             </div>
-            <div className="form-group">
-              <label>Type</label>
-              <select
-                value={editingPlan.type}
-                onChange={(e) => setEditingPlan({ ...editingPlan, type: e.target.value })}
-              >
-                <option value="HA">Acier HA</option>
-                <option value="TS">Treillis soudés</option>
-              </select>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Poids ASS (kg)</label>
+                <input
+                  type="number"
+                  value={editingPlan.poidsASSCommande || 0}
+                  onChange={(e) => setEditingPlan({ ...editingPlan, poidsASSCommande: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Poids CF (kg)</label>
+                <input
+                  type="number"
+                  value={editingPlan.poidsCFCommande || 0}
+                  onChange={(e) => setEditingPlan({ ...editingPlan, poidsCFCommande: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
             </div>
-            {editingPlan.type === 'HA' && (
-              <div className="form-group">
-                <label>Poids (kg)</label>
-                <input
-                  type="number"
-                  value={editingPlan.poidsKg}
-                  onChange={(e) => setEditingPlan({ ...editingPlan, poidsKg: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
-            )}
-            {editingPlan.type === 'TS' && (
-              <div className="form-group">
-                <label>Surface (m²)</label>
-                <input
-                  type="number"
-                  value={editingPlan.surfaceM2}
-                  onChange={(e) => setEditingPlan({ ...editingPlan, surfaceM2: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
-            )}
             <div className="form-group">
-              <label>Date de livraison</label>
+              <label>Date prévue</label>
               <input
                 type="date"
-                value={editingPlan.dateLivraison}
-                onChange={(e) => setEditingPlan({ ...editingPlan, dateLivraison: e.target.value })}
+                value={editingPlan.datePrevue || ''}
+                onChange={(e) => setEditingPlan({ ...editingPlan, datePrevue: e.target.value })}
               />
             </div>
             <div className="modal-actions">

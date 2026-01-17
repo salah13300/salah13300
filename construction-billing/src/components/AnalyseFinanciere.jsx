@@ -1,40 +1,47 @@
 import { useMemo } from 'react';
 import { useChantier } from '../context/ChantierContext';
 import {
-  calculerHistoriqueResultats,
+  calculerStatistiquesGlobales,
   formatEuros,
   formatNumber,
-  getMoisDisponibles
+  getClientsUniques
 } from '../utils/calculations';
-import { TrendingUp, TrendingDown, BarChart3, PieChart } from 'lucide-react';
+import { BarChart3, Package, Users } from 'lucide-react';
 
 export default function AnalyseFinanciere() {
   const { state } = useChantier();
-  const { plans, config } = state;
+  const { plans, clients, config } = state;
 
-  const historique = useMemo(
-    () => calculerHistoriqueResultats(plans, config),
-    [plans, config]
+  const stats = useMemo(
+    () => calculerStatistiquesGlobales(plans, clients, config),
+    [plans, clients, config]
   );
 
-  const totaux = useMemo(() => {
-    return historique.reduce((acc, h) => ({
-      ca: acc.ca + h.chiffreAffaires,
-      couts: acc.couts + h.couts,
-      marge: acc.marge + h.marge
-    }), { ca: 0, couts: 0, marge: 0 });
-  }, [historique]);
+  const listeClients = useMemo(() => getClientsUniques(plans), [plans]);
 
-  const margeGlobalePercent = totaux.ca > 0 ? (totaux.marge / totaux.ca) * 100 : 0;
+  // Statistiques par client
+  const statsParClient = useMemo(() => {
+    return listeClients.map(client => {
+      const plansClient = plans.filter(p => p.codeClient === client.code);
+      const totalASS = plansClient.reduce((sum, p) => sum + (p.poidsASSCommande || 0), 0);
+      const totalCF = plansClient.reduce((sum, p) => sum + (p.poidsCFCommande || 0), 0);
 
-  const formatMois = (mois) => {
-    const [year, month] = mois.split('-');
-    const date = new Date(year, month - 1);
-    return date.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
-  };
+      const prixASS = clients[client.code]?.prixASS || config.prixASSDefaut;
+      const prixCF = clients[client.code]?.prixCF || config.prixCFDefaut;
 
-  // Calcul du max pour les barres
-  const maxCA = Math.max(...historique.map(h => h.chiffreAffaires), 1);
+      const montant = (totalASS * prixASS) + (totalCF * prixCF);
+
+      return {
+        code: client.code,
+        nom: client.nom,
+        nbPlans: plansClient.length,
+        totalASS,
+        totalCF,
+        totalPoids: totalASS + totalCF,
+        montant
+      };
+    }).sort((a, b) => b.montant - a.montant);
+  }, [plans, clients, config, listeClients]);
 
   return (
     <div className="analyse-financiere">
@@ -46,128 +53,73 @@ export default function AnalyseFinanciere() {
             <BarChart3 size={32} />
           </div>
           <div className="summary-content">
-            <span className="summary-value">{formatEuros(totaux.ca)}</span>
-            <span className="summary-label">Chiffre d'affaires total</span>
+            <span className="summary-value">{formatEuros(stats.totalMontant)}</span>
+            <span className="summary-label">Montant total commandé</span>
           </div>
         </div>
 
         <div className="summary-card large">
-          <div className="summary-icon negative">
-            <PieChart size={32} />
-          </div>
-          <div className="summary-content">
-            <span className="summary-value">{formatEuros(totaux.couts)}</span>
-            <span className="summary-label">Coûts totaux</span>
-          </div>
-        </div>
-
-        <div className={`summary-card large ${totaux.marge >= 0 ? 'positive' : 'negative'}`}>
           <div className="summary-icon">
-            {totaux.marge >= 0 ? <TrendingUp size={32} /> : <TrendingDown size={32} />}
+            <Package size={32} />
           </div>
           <div className="summary-content">
-            <span className="summary-value">{formatEuros(totaux.marge)}</span>
-            <span className="summary-label">
-              Marge totale ({formatNumber(margeGlobalePercent, 1)}%)
-            </span>
+            <span className="summary-value">{formatNumber(stats.totalPoidsHA, 0)} kg</span>
+            <span className="summary-label">Total acier (ASS + CF)</span>
           </div>
         </div>
-      </div>
 
-      <div className="analyse-chart">
-        <h3>Évolution mensuelle</h3>
-        <div className="chart-container">
-          {historique.length === 0 ? (
-            <div className="empty-state">
-              <p>Aucune donnée disponible</p>
-              <p className="hint">Importez des plans et saisissez les avancements</p>
-            </div>
-          ) : (
-            <div className="bar-chart">
-              {historique.map((h, index) => (
-                <div key={h.mois} className="bar-group">
-                  <div className="bars">
-                    <div
-                      className="bar ca"
-                      style={{ height: `${(h.chiffreAffaires / maxCA) * 100}%` }}
-                      title={`CA: ${formatEuros(h.chiffreAffaires)}`}
-                    >
-                      <span className="bar-value">{formatEuros(h.chiffreAffaires)}</span>
-                    </div>
-                    <div
-                      className="bar couts"
-                      style={{ height: `${(h.couts / maxCA) * 100}%` }}
-                      title={`Coûts: ${formatEuros(h.couts)}`}
-                    />
-                  </div>
-                  <div className={`marge-indicator ${h.marge >= 0 ? 'positive' : 'negative'}`}>
-                    {h.marge >= 0 ? '+' : ''}{formatEuros(h.marge)}
-                  </div>
-                  <div className="bar-label">{formatMois(h.mois)}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="chart-legend">
-          <span className="legend-item ca">CA</span>
-          <span className="legend-item couts">Coûts</span>
+        <div className="summary-card large">
+          <div className="summary-icon">
+            <Users size={32} />
+          </div>
+          <div className="summary-content">
+            <span className="summary-value">{listeClients.length}</span>
+            <span className="summary-label">Clients actifs</span>
+          </div>
         </div>
       </div>
 
       <div className="analyse-table">
-        <h3>Détail par mois</h3>
+        <h3>Répartition par client</h3>
         <table>
           <thead>
             <tr>
-              <th>Mois</th>
-              <th>Chiffre d'affaires</th>
-              <th>Coûts</th>
-              <th>Marge</th>
-              <th>Taux de marge</th>
-              <th>Tendance</th>
+              <th>Client</th>
+              <th>Nb Plans</th>
+              <th>ASS (kg)</th>
+              <th>CF (kg)</th>
+              <th>Total (kg)</th>
+              <th>Montant HT</th>
+              <th>Part CA</th>
             </tr>
           </thead>
           <tbody>
-            {historique.map((h, index) => {
-              const prevMarge = index > 0 ? historique[index - 1].marge : 0;
-              const tendance = h.marge - prevMarge;
-
-              return (
-                <tr key={h.mois}>
-                  <td>{formatMois(h.mois)}</td>
-                  <td className="amount">{formatEuros(h.chiffreAffaires)}</td>
-                  <td className="amount">{formatEuros(h.couts)}</td>
-                  <td className={`amount ${h.marge >= 0 ? 'positive' : 'negative'}`}>
-                    {formatEuros(h.marge)}
-                  </td>
-                  <td className={`percent ${h.margePercent >= 0 ? 'positive' : 'negative'}`}>
-                    {formatNumber(h.margePercent, 1)}%
-                  </td>
-                  <td className="tendance">
-                    {index > 0 && (
-                      <span className={tendance >= 0 ? 'positive' : 'negative'}>
-                        {tendance >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-                        {tendance >= 0 ? '+' : ''}{formatEuros(tendance)}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
+            {statsParClient.map(client => (
+              <tr key={client.code}>
+                <td><strong>{client.nom || client.code}</strong></td>
+                <td className="amount">{client.nbPlans}</td>
+                <td className="amount">{formatNumber(client.totalASS, 0)}</td>
+                <td className="amount">{formatNumber(client.totalCF, 0)}</td>
+                <td className="amount">{formatNumber(client.totalPoids, 0)}</td>
+                <td className="amount">{formatEuros(client.montant)}</td>
+                <td className="percent">
+                  {stats.totalMontant > 0
+                    ? formatNumber((client.montant / stats.totalMontant) * 100, 1) + '%'
+                    : '0%'
+                  }
+                </td>
+              </tr>
+            ))}
           </tbody>
           <tfoot>
             <tr className="total">
               <td><strong>TOTAL</strong></td>
-              <td className="amount"><strong>{formatEuros(totaux.ca)}</strong></td>
-              <td className="amount"><strong>{formatEuros(totaux.couts)}</strong></td>
-              <td className={`amount ${totaux.marge >= 0 ? 'positive' : 'negative'}`}>
-                <strong>{formatEuros(totaux.marge)}</strong>
-              </td>
-              <td className={`percent ${margeGlobalePercent >= 0 ? 'positive' : 'negative'}`}>
-                <strong>{formatNumber(margeGlobalePercent, 1)}%</strong>
-              </td>
-              <td></td>
+              <td className="amount"><strong>{stats.nbPlans}</strong></td>
+              <td className="amount"><strong>{formatNumber(stats.totalPoidsASS, 0)}</strong></td>
+              <td className="amount"><strong>{formatNumber(stats.totalPoidsCF, 0)}</strong></td>
+              <td className="amount"><strong>{formatNumber(stats.totalPoidsHA, 0)}</strong></td>
+              <td className="amount"><strong>{formatEuros(stats.totalMontant)}</strong></td>
+              <td className="percent"><strong>100%</strong></td>
             </tr>
           </tfoot>
         </table>
@@ -177,36 +129,27 @@ export default function AnalyseFinanciere() {
         <h3>Indicateurs clés</h3>
         <div className="insights-grid">
           <div className="insight-card">
-            <span className="insight-label">Meilleur mois</span>
+            <span className="insight-label">Prix moyen ASS</span>
+            <span className="insight-value">{formatEuros(config.prixASSDefaut)}/kg</span>
+          </div>
+          <div className="insight-card">
+            <span className="insight-label">Prix moyen CF</span>
+            <span className="insight-value">{formatEuros(config.prixCFDefaut)}/kg</span>
+          </div>
+          <div className="insight-card">
+            <span className="insight-label">Poids moyen/plan</span>
             <span className="insight-value">
-              {historique.length > 0
-                ? formatMois(historique.reduce((best, h) =>
-                    h.marge > best.marge ? h : best
-                  ).mois)
+              {stats.nbPlans > 0
+                ? formatNumber(stats.totalPoidsHA / stats.nbPlans, 0) + ' kg'
                 : '-'
               }
             </span>
           </div>
           <div className="insight-card">
-            <span className="insight-label">Marge moyenne</span>
+            <span className="insight-label">CA moyen/client</span>
             <span className="insight-value">
-              {historique.length > 0
-                ? formatEuros(totaux.marge / historique.length)
-                : '-'
-              }
-            </span>
-          </div>
-          <div className="insight-card">
-            <span className="insight-label">Mois rentables</span>
-            <span className="insight-value">
-              {historique.filter(h => h.marge > 0).length} / {historique.length}
-            </span>
-          </div>
-          <div className="insight-card">
-            <span className="insight-label">CA moyen/mois</span>
-            <span className="insight-value">
-              {historique.length > 0
-                ? formatEuros(totaux.ca / historique.length)
+              {listeClients.length > 0
+                ? formatEuros(stats.totalMontant / listeClients.length)
                 : '-'
               }
             </span>

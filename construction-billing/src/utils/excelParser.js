@@ -1,8 +1,10 @@
 import * as XLSX from 'xlsx';
 
 /**
- * Parse un fichier Excel contenant des plans HA ou TS
- * Colonnes attendues: Numéro Plan, Désignation, Type (HA/TS), Poids (kg), Surface (m²), Date Livraison
+ * Parse un fichier Excel de plans HA (format réel)
+ * Colonnes : Code, Code chantier, Code client, Nom client, Nom chantier,
+ * No/ind. plan, Désignation, Poids ASS commandé, Poids CF commandé, Usine, Date prévue,
+ * BL. No, Poids ASS facturé, Poids CF facturé
  */
 export function parseExcelFile(file) {
   return new Promise((resolve, reject) => {
@@ -17,29 +19,48 @@ export function parseExcelFile(file) {
         const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
 
         const plans = jsonData.map((row, index) => {
-          // Mapping flexible des colonnes
+          // Mapping des colonnes vers notre structure
           const plan = {
-            id: generatePlanId(row),
-            numeroPlan: row['Numéro Plan'] || row['N° Plan'] || row['Plan'] || row['numero_plan'] || `PLAN-${index + 1}`,
-            designation: row['Désignation'] || row['Description'] || row['designation'] || '',
-            type: detectType(row),
-            poidsKg: parseFloat(row['Poids'] || row['Poids (kg)'] || row['poids'] || 0),
-            surfaceM2: parseFloat(row['Surface'] || row['Surface (m²)'] || row['surface'] || 0),
-            dateLivraison: parseDate(row['Date Livraison'] || row['Date'] || row['date_livraison']),
+            id: generatePlanId(row, index),
+            code: getString(row, ['Code']),
+            codeChantier: getString(row, ['Code chantier']),
+            codeClient: getString(row, ['Code client']),
+            nomClient: getString(row, ['Nom client']),
+            nomChantier: getString(row, ['Nom chantier']),
+            numeroPlan: getString(row, ['No/ind. plan', 'N°/ind. plan', 'No/ind plan', 'Numéro Plan']) || `PLAN-${index + 1}`,
+            designation: getString(row, ['Désignation', 'Designation']),
+
+            // Poids commandés (HA)
+            poidsASSCommande: getNumber(row, ['Poids ASS commandé', 'Poids ASS commande', 'Poids ASS']),
+            poidsCFCommande: getNumber(row, ['Poids CF commandé', 'Poids CF commande', 'Poids CF']),
+
+            usine: getString(row, ['Usine']),
+            datePrevue: parseDate(row['Date prévue'] || row['Date prevue'] || row['Date Livraison']),
+            blNumero: getString(row, ['BL. No', 'BL No', 'BL']),
+
+            // Poids facturés
+            poidsASSFacture: getNumber(row, ['Poids ASS facturé', 'Poids ASS facture']),
+            poidsCFFacture: getNumber(row, ['Poids CF facturé', 'Poids CF facture']),
+
+            // Pour treillis soudés
+            surfaceTS: getNumber(row, ['Surface', 'Surface (m²)']),
+            quantiteTS: getNumber(row, ['Quantité', 'Qté']),
+
+            type: 'HA', // Sera mis à jour si c'est un TS
             moisImport: new Date().toISOString().slice(0, 7),
-            facturable: false, // Sera déterminé selon les critères
-            facture: false,
-            moisFacturation: null,
-            avancements: {}, // { "2024-01": 30, "2024-02": 60, ... }
+            avancements: {}, // { "2024-01": { ass: 30, cf: 30 }, ... }
           };
 
-          // Auto-détection du type basé sur les données
-          if (plan.type === 'HA' && plan.surfaceM2 > 0 && plan.poidsKg === 0) {
+          // Détection du type
+          if (plan.surfaceTS > 0 || plan.quantiteTS > 0) {
             plan.type = 'TS';
           }
 
           return plan;
-        }).filter(plan => plan.numeroPlan && (plan.poidsKg > 0 || plan.surfaceM2 > 0));
+        }).filter(plan =>
+          plan.numeroPlan &&
+          (plan.poidsASSCommande > 0 || plan.poidsCFCommande > 0 || plan.surfaceTS > 0 || plan.quantiteTS > 0)
+        );
 
         resolve(plans);
       } catch (error) {
@@ -52,19 +73,31 @@ export function parseExcelFile(file) {
   });
 }
 
-function generatePlanId(row) {
-  const num = row['Numéro Plan'] || row['N° Plan'] || row['Plan'] || row['numero_plan'] || '';
-  const date = new Date().getTime();
-  return `${num}-${date}-${Math.random().toString(36).substr(2, 9)}`;
+// Helpers pour extraire les valeurs avec plusieurs noms de colonnes possibles
+function getString(row, keys) {
+  for (const key of keys) {
+    if (row[key] !== undefined && row[key] !== '') {
+      return String(row[key]);
+    }
+  }
+  return '';
 }
 
-function detectType(row) {
-  const type = (row['Type'] || row['type'] || '').toUpperCase();
-  if (type.includes('TS') || type.includes('TREILLIS')) return 'TS';
-  if (type.includes('HA') || type.includes('ACIER')) return 'HA';
-  // Par défaut, on regarde les colonnes présentes
-  if (row['Surface'] || row['Surface (m²)']) return 'TS';
-  return 'HA';
+function getNumber(row, keys) {
+  for (const key of keys) {
+    if (row[key] !== undefined && row[key] !== '') {
+      const val = parseFloat(row[key]);
+      if (!isNaN(val)) return val;
+    }
+  }
+  return 0;
+}
+
+function generatePlanId(row, index) {
+  const code = row['Code'] || '';
+  const plan = row['No/ind. plan'] || row['N°/ind. plan'] || '';
+  const date = new Date().getTime();
+  return `${code}-${plan}-${date}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
 function parseDate(dateValue) {
@@ -77,43 +110,72 @@ function parseDate(dateValue) {
   }
 
   // Si c'est une string, essayer de parser
-  try {
-    const d = new Date(dateValue);
-    if (!isNaN(d.getTime())) {
-      return d.toISOString().slice(0, 10);
+  if (typeof dateValue === 'string') {
+    // Format DD-MM-YYYY ou DD/MM/YYYY
+    const parts = dateValue.split(/[-/]/);
+    if (parts.length === 3) {
+      const day = parts[0];
+      const month = parts[1];
+      const year = parts[2];
+      if (day.length <= 2 && month.length <= 2 && year.length === 4) {
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      }
     }
-  } catch (e) {
-    // ignore
+
+    try {
+      const d = new Date(dateValue);
+      if (!isNaN(d.getTime())) {
+        return d.toISOString().slice(0, 10);
+      }
+    } catch (e) {
+      // ignore
+    }
   }
 
   return new Date().toISOString().slice(0, 10);
 }
 
 /**
- * Génère un fichier Excel template
+ * Génère un fichier Excel template correspondant au format attendu
  */
 export function generateTemplate() {
   const template = [
     {
-      'Numéro Plan': 'EX-001',
-      'Désignation': 'Fondations bâtiment A',
-      'Type': 'HA',
-      'Poids (kg)': 1500,
-      'Surface (m²)': '',
-      'Date Livraison': '2024-01-15'
+      'Code': 'BATCRE-0044',
+      'Code chantier': 'BATCRE',
+      'Code client': 'BATARM',
+      'Nom client': 'BATI ARMA CRETEIL',
+      'Nom chantier': 'BATI ARMA CRETEIL',
+      'No/ind. plan': 'BA145.2 / A',
+      'Désignation': 'ZONE 2 PH.E+1 POUTRES',
+      'Poids ASS commandé': 9156.57,
+      'Poids CF commandé': 894.49,
+      'Usine': 'ARMASEINE',
+      'Date prévue': '13-01-2026',
+      'BL. No': '2601047',
+      'Poids ASS facturé': 9751.32,
+      'Poids CF facturé': 1045.43
     },
     {
-      'Numéro Plan': 'EX-002',
-      'Désignation': 'Dalle niveau 0',
-      'Type': 'TS',
-      'Poids (kg)': '',
-      'Surface (m²)': 250,
-      'Date Livraison': '2024-01-20'
+      'Code': 'ANGLEV-0070',
+      'Code chantier': 'ANGLEV',
+      'Code client': 'ANGEVI',
+      'Nom client': 'ANGEVIN ILE DE FRANCE',
+      'Nom chantier': 'ANGEVIN LEVALLOIS-PERRET STEELPOS',
+      'No/ind. plan': 'PH.2 S/SOL POUTRE 33',
+      'Désignation': '',
+      'Poids ASS commandé': 0,
+      'Poids CF commandé': 1333.95,
+      'Usine': 'STEEL INDUSTRIE',
+      'Date prévue': '08-12-2025',
+      'BL. No': '2512062',
+      'Poids ASS facturé': 0,
+      'Poids CF facturé': 1375.43
     }
   ];
 
   const ws = XLSX.utils.json_to_sheet(template);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Plans');
-  XLSX.writeFile(wb, 'template_plans.xlsx');
+  XLSX.utils.book_append_sheet(wb, ws, 'Plans HA');
+  XLSX.writeFile(wb, 'template_plans_ha.xlsx');
 }

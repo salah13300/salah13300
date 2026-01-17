@@ -1,26 +1,36 @@
 import { useState, useMemo } from 'react';
 import { useChantier } from '../context/ChantierContext';
 import {
-  calculerSituation,
+  calculerSituationClient,
   formatEuros,
   formatNumber,
   getMoisDisponibles,
-  getMoisPrecedent
+  getClientsUniques,
+  calculerAvancementCumule
 } from '../utils/calculations';
-import { Calendar, Save, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, Save, FileDown, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 export default function SituationMensuelle() {
   const { state, dispatch } = useChantier();
-  const { plans, currentMonth, config } = state;
+  const { plans, clients, currentMonth, currentClient, config } = state;
 
   const [editingAvancements, setEditingAvancements] = useState({});
 
   const moisDisponibles = useMemo(() => getMoisDisponibles(plans), [plans]);
-  const situation = useMemo(
-    () => calculerSituation(plans, currentMonth, config),
-    [plans, currentMonth, config]
-  );
+  const listeClients = useMemo(() => getClientsUniques(plans), [plans]);
+
+  // Sélectionner le premier client par défaut si aucun n'est sélectionné
+  const clientActif = currentClient || (listeClients.length > 0 ? listeClients[0].code : null);
+
+  const situation = useMemo(() => {
+    if (!clientActif) return null;
+    return calculerSituationClient(plans, clientActif, currentMonth, clients, config);
+  }, [plans, clientActif, currentMonth, clients, config]);
+
+  const handleClientChange = (codeClient) => {
+    dispatch({ type: 'SET_CURRENT_CLIENT', payload: codeClient });
+  };
 
   const handleMoisChange = (direction) => {
     const currentIndex = moisDisponibles.indexOf(currentMonth);
@@ -73,36 +83,37 @@ export default function SituationMensuelle() {
   };
 
   const exportToExcel = () => {
+    if (!situation) return;
+
     const data = situation.details.map(d => ({
       'N° Plan': d.plan.numeroPlan,
       'Désignation': d.plan.designation,
-      'Type': d.plan.type,
-      'Quantité': d.plan.type === 'HA' ? d.plan.poidsKg : d.plan.surfaceM2,
-      'Unité': d.plan.type === 'HA' ? 'kg' : 'm²',
-      'Montant Total': d.montantTotal,
-      'Avancement Cumul Ant (%)': d.avancementCumulAnt,
-      'Avancement Mois (%)': d.avancementMois,
-      'Avancement Cumul Nouv (%)': d.avancementCumulNouveau,
-      'Montant Cumul Antérieur': d.montantCumulAnt,
-      'Montant Mois': d.montantMois,
-      'Montant Cumul Nouveau': d.montantCumulNouveau,
-      'Marge Mois': d.margeMois
+      'Poids ASS Commandé': d.plan.poidsASSCommande,
+      'Poids CF Commandé': d.plan.poidsCFCommande,
+      'Avancement (%)': d.avancementNouveau,
+      'Montant ASS': d.montantASSNouveau,
+      'Montant CF': d.montantCFNouveau,
+      'Montant Total': d.montantTotalNouveau,
     }));
 
-    // Ajouter les totaux
     data.push({});
     data.push({
-      'N° Plan': 'TOTAL',
-      'Montant Cumul Antérieur': situation.totaux.total.cumulAnt,
-      'Montant Mois': situation.totaux.total.mois,
-      'Montant Cumul Nouveau': situation.totaux.total.cumulNouveau,
-      'Marge Mois': situation.resultat.mois
+      'N° Plan': 'TOTAL HT',
+      'Montant Total': situation.totalHT.nouveauCumul,
+    });
+    data.push({
+      'N° Plan': 'TVA ' + config.tva + '%',
+      'Montant Total': situation.tva.nouveauCumul,
+    });
+    data.push({
+      'N° Plan': 'TOTAL TTC',
+      'Montant Total': situation.totalTTC.nouveauCumul,
     });
 
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Situation');
-    XLSX.writeFile(wb, `situation_${currentMonth}.xlsx`);
+    XLSX.writeFile(wb, `situation_${clientActif}_${currentMonth}.xlsx`);
   };
 
   const formatMois = (mois) => {
@@ -111,12 +122,34 @@ export default function SituationMensuelle() {
     return date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
   };
 
-  const isGain = situation.resultat.mois >= 0;
+  if (listeClients.length === 0) {
+    return (
+      <div className="situation-mensuelle">
+        <h2>Situation Mensuelle</h2>
+        <div className="empty-state">
+          <p>Aucun client disponible</p>
+          <p className="hint">Importez des plans via l'onglet "Import Excel"</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="situation-mensuelle">
       <div className="situation-header">
         <h2>Situation Mensuelle</h2>
+
+        <div className="client-selector">
+          <Users size={20} />
+          <select
+            value={clientActif || ''}
+            onChange={(e) => handleClientChange(e.target.value)}
+          >
+            {listeClients.map(c => (
+              <option key={c.code} value={c.code}>{c.nom || c.code}</option>
+            ))}
+          </select>
+        </div>
 
         <div className="month-navigation">
           <button
@@ -150,144 +183,136 @@ export default function SituationMensuelle() {
           {Object.keys(editingAvancements).length > 0 && (
             <button className="btn btn-primary" onClick={saveAllAvancements}>
               <Save size={18} />
-              Enregistrer les avancements
+              Enregistrer
             </button>
           )}
           <button className="btn btn-secondary" onClick={exportToExcel}>
             <FileDown size={18} />
-            Exporter Excel
+            Export Excel
           </button>
         </div>
       </div>
 
-      <div className="situation-summary">
-        <div className={`summary-card ${isGain ? 'positive' : 'negative'}`}>
-          <span className="summary-label">Résultat du mois</span>
-          <span className="summary-value">{formatEuros(situation.resultat.mois)}</span>
-        </div>
-        <div className="summary-card">
-          <span className="summary-label">CA du mois</span>
-          <span className="summary-value">{formatEuros(situation.totaux.total.mois)}</span>
-        </div>
-        <div className="summary-card">
-          <span className="summary-label">Cumul CA</span>
-          <span className="summary-value">{formatEuros(situation.totaux.total.cumulNouveau)}</span>
-        </div>
-      </div>
-
-      <div className="situation-table-container">
-        <table className="situation-table">
-          <thead>
-            <tr>
-              <th rowSpan="2">N° Plan</th>
-              <th rowSpan="2">Désignation</th>
-              <th rowSpan="2">Type</th>
-              <th rowSpan="2">Qté</th>
-              <th rowSpan="2">Montant Total</th>
-              <th colSpan="3" className="group-header">Avancement (%)</th>
-              <th colSpan="3" className="group-header">Montant</th>
-              <th rowSpan="2">Marge Mois</th>
-            </tr>
-            <tr>
-              <th className="sub-header">Cumul Ant.</th>
-              <th className="sub-header">Mois</th>
-              <th className="sub-header">Nouv. Cumul</th>
-              <th className="sub-header">Cumul Ant.</th>
-              <th className="sub-header">Mois</th>
-              <th className="sub-header">Nouv. Cumul</th>
-            </tr>
-          </thead>
-          <tbody>
-            {situation.details.map(detail => {
-              const currentAvancement = editingAvancements[detail.plan.id] ??
-                detail.avancementCumulNouveau;
-
-              return (
-                <tr key={detail.plan.id}>
-                  <td className="plan-number">{detail.plan.numeroPlan}</td>
-                  <td className="designation">{detail.plan.designation}</td>
-                  <td>
-                    <span className={`type-badge ${detail.plan.type.toLowerCase()}`}>
-                      {detail.plan.type}
-                    </span>
-                  </td>
-                  <td className="quantity">
-                    {detail.plan.type === 'HA'
-                      ? `${formatNumber(detail.plan.poidsKg, 0)} kg`
-                      : `${formatNumber(detail.plan.surfaceM2, 0)} m²`
-                    }
-                  </td>
-                  <td className="amount">{formatEuros(detail.montantTotal)}</td>
-                  <td className="percent">{formatNumber(detail.avancementCumulAnt, 0)}%</td>
-                  <td className="percent highlight">{formatNumber(detail.avancementMois, 0)}%</td>
-                  <td className="percent editable">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={currentAvancement}
-                      onChange={(e) => handleAvancementChange(detail.plan.id, e.target.value)}
-                      onBlur={() => saveAvancement(detail.plan.id)}
-                      onKeyDown={(e) => e.key === 'Enter' && saveAvancement(detail.plan.id)}
-                    />
-                    %
-                  </td>
-                  <td className="amount">{formatEuros(detail.montantCumulAnt)}</td>
-                  <td className="amount highlight">{formatEuros(detail.montantMois)}</td>
-                  <td className="amount">{formatEuros(detail.montantCumulNouveau)}</td>
-                  <td className={`amount ${detail.margeMois >= 0 ? 'positive' : 'negative'}`}>
-                    {formatEuros(detail.margeMois)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="subtotal ha">
-              <td colSpan="4"><strong>Total Acier HA</strong></td>
-              <td></td>
-              <td></td>
-              <td></td>
-              <td></td>
-              <td className="amount">{formatEuros(situation.totaux.ha.cumulAnt)}</td>
-              <td className="amount">{formatEuros(situation.totaux.ha.mois)}</td>
-              <td className="amount">{formatEuros(situation.totaux.ha.cumulNouveau)}</td>
-              <td></td>
-            </tr>
-            <tr className="subtotal ts">
-              <td colSpan="4"><strong>Total Treillis Soudés</strong></td>
-              <td></td>
-              <td></td>
-              <td></td>
-              <td></td>
-              <td className="amount">{formatEuros(situation.totaux.ts.cumulAnt)}</td>
-              <td className="amount">{formatEuros(situation.totaux.ts.mois)}</td>
-              <td className="amount">{formatEuros(situation.totaux.ts.cumulNouveau)}</td>
-              <td></td>
-            </tr>
-            <tr className="total">
-              <td colSpan="4"><strong>TOTAL GÉNÉRAL</strong></td>
-              <td></td>
-              <td></td>
-              <td></td>
-              <td></td>
-              <td className="amount"><strong>{formatEuros(situation.totaux.total.cumulAnt)}</strong></td>
-              <td className="amount"><strong>{formatEuros(situation.totaux.total.mois)}</strong></td>
-              <td className="amount"><strong>{formatEuros(situation.totaux.total.cumulNouveau)}</strong></td>
-              <td className={`amount ${isGain ? 'positive' : 'negative'}`}>
-                <strong>{formatEuros(situation.resultat.mois)}</strong>
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-
-        {situation.details.length === 0 && (
-          <div className="empty-state">
-            <p>Aucun plan disponible</p>
-            <p className="hint">Importez des plans via l'onglet "Import Excel"</p>
+      {situation && (
+        <>
+          <div className="situation-summary">
+            <div className="summary-card">
+              <span className="summary-label">Nouveau Cumul HT</span>
+              <span className="summary-value">{formatEuros(situation.totalHT.nouveauCumul)}</span>
+            </div>
+            <div className="summary-card">
+              <span className="summary-label">Ancien Cumul HT</span>
+              <span className="summary-value">{formatEuros(situation.totalHT.ancienCumul)}</span>
+            </div>
+            <div className="summary-card">
+              <span className="summary-label">Mois HT</span>
+              <span className="summary-value">{formatEuros(situation.totalHT.mois)}</span>
+            </div>
           </div>
-        )}
-      </div>
+
+          <div className="situation-table-container">
+            <table className="situation-table">
+              <thead>
+                <tr>
+                  <th rowSpan="2">N° Plan</th>
+                  <th rowSpan="2">Désignation</th>
+                  <th colSpan="3" className="group-header">Quantité (kg)</th>
+                  <th colSpan="3" className="group-header">Montant HT</th>
+                  <th rowSpan="2">Avancement</th>
+                </tr>
+                <tr>
+                  <th className="sub-header">Nouv. Cumul</th>
+                  <th className="sub-header">Ancien</th>
+                  <th className="sub-header">Mois</th>
+                  <th className="sub-header">Nouv. Cumul</th>
+                  <th className="sub-header">Ancien</th>
+                  <th className="sub-header">Mois</th>
+                </tr>
+              </thead>
+              <tbody>
+                {situation.details.map(detail => {
+                  const currentAvancement = editingAvancements[detail.plan.id] ?? detail.avancementNouveau;
+                  const totalPoids = (detail.plan.poidsASSCommande || 0) + (detail.plan.poidsCFCommande || 0);
+
+                  return (
+                    <tr key={detail.plan.id}>
+                      <td className="plan-number">{detail.plan.numeroPlan}</td>
+                      <td className="designation">{detail.plan.designation}</td>
+                      <td className="amount">{formatNumber(totalPoids * detail.avancementNouveau / 100, 0)}</td>
+                      <td className="amount">{formatNumber(totalPoids * detail.avancementAncien / 100, 0)}</td>
+                      <td className="amount highlight">{formatNumber(totalPoids * detail.avancementMois / 100, 0)}</td>
+                      <td className="amount">{formatEuros(detail.montantTotalNouveau)}</td>
+                      <td className="amount">{formatEuros(detail.montantTotalAncien)}</td>
+                      <td className="amount highlight">{formatEuros(detail.montantTotalMois)}</td>
+                      <td className="percent editable">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={currentAvancement}
+                          onChange={(e) => handleAvancementChange(detail.plan.id, e.target.value)}
+                          onBlur={() => saveAvancement(detail.plan.id)}
+                          onKeyDown={(e) => e.key === 'Enter' && saveAvancement(detail.plan.id)}
+                        />
+                        %
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="subtotal">
+                  <td colSpan="2"><strong>Total Acier ASS</strong></td>
+                  <td className="amount">{formatNumber(situation.quantites.ass.nouveauCumul, 0)}</td>
+                  <td className="amount">{formatNumber(situation.quantites.ass.ancienCumul, 0)}</td>
+                  <td className="amount">{formatNumber(situation.quantites.ass.mois, 0)}</td>
+                  <td className="amount">{formatEuros(situation.totaux.ass.nouveauCumul)}</td>
+                  <td className="amount">{formatEuros(situation.totaux.ass.ancienCumul)}</td>
+                  <td className="amount">{formatEuros(situation.totaux.ass.mois)}</td>
+                  <td></td>
+                </tr>
+                <tr className="subtotal">
+                  <td colSpan="2"><strong>Total Acier CF</strong></td>
+                  <td className="amount">{formatNumber(situation.quantites.cf.nouveauCumul, 0)}</td>
+                  <td className="amount">{formatNumber(situation.quantites.cf.ancienCumul, 0)}</td>
+                  <td className="amount">{formatNumber(situation.quantites.cf.mois, 0)}</td>
+                  <td className="amount">{formatEuros(situation.totaux.cf.nouveauCumul)}</td>
+                  <td className="amount">{formatEuros(situation.totaux.cf.ancienCumul)}</td>
+                  <td className="amount">{formatEuros(situation.totaux.cf.mois)}</td>
+                  <td></td>
+                </tr>
+                <tr className="total">
+                  <td colSpan="5"><strong>TOTAL HT</strong></td>
+                  <td className="amount"><strong>{formatEuros(situation.totalHT.nouveauCumul)}</strong></td>
+                  <td className="amount"><strong>{formatEuros(situation.totalHT.ancienCumul)}</strong></td>
+                  <td className="amount"><strong>{formatEuros(situation.totalHT.mois)}</strong></td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td colSpan="5">TVA {config.tva}%</td>
+                  <td className="amount">{formatEuros(situation.tva.nouveauCumul)}</td>
+                  <td className="amount">{formatEuros(situation.tva.ancienCumul)}</td>
+                  <td className="amount">{formatEuros(situation.tva.mois)}</td>
+                  <td></td>
+                </tr>
+                <tr className="total">
+                  <td colSpan="5"><strong>TOTAL TTC</strong></td>
+                  <td className="amount"><strong>{formatEuros(situation.totalTTC.nouveauCumul)}</strong></td>
+                  <td className="amount"><strong>{formatEuros(situation.totalTTC.ancienCumul)}</strong></td>
+                  <td className="amount"><strong>{formatEuros(situation.totalTTC.mois)}</strong></td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+
+            {situation.details.length === 0 && (
+              <div className="empty-state">
+                <p>Aucun plan pour ce client</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
