@@ -2,25 +2,57 @@ import { createContext, useContext, useReducer, useEffect } from 'react';
 
 const ChantierContext = createContext();
 
+// Prestations par défaut avec leurs prix
+const prestationsDefaut = {
+  'HA': { nom: 'Fourniture & Pose HA', unite: 'kg', prixVente: 1.32, prixAchat: 1.00 },
+  'Treillis-Pose': { nom: 'Pose treillis-soudés', unite: 'kg', prixVente: 0.40, prixAchat: 0.30 },
+  'Ecarteur': { nom: 'Fourniture et pose de distancier', unite: 'u', prixVente: 1.30, prixAchat: 0.80 },
+  'Rupteur': { nom: 'Pose de rupture thermique', unite: 'u', prixVente: 3.00, prixAchat: 2.00 },
+  'Redressage': { nom: 'Redressage des aciers des autres lots', unite: 'kg', prixVente: 4.00, prixAchat: 3.00 },
+  'BA-pose': { nom: 'Pose Boîte d\'attentes', unite: 'u', prixVente: 4.00, prixAchat: 2.50 },
+  'Suspentes': { nom: 'Redressage Suspentes', unite: 'u', prixVente: 0.00, prixAchat: 0.00 },
+  'Depliage': { nom: 'Dépliage, Façonnage console courte', unite: 'u', prixVente: 15.00, prixAchat: 10.00 },
+  'Samedi': { nom: 'Plus-Value travail du Samedi', unite: 'h', prixVente: 250.00, prixAchat: 200.00 },
+  'Manutention': { nom: 'Plus-Value manutention HA+TS', unite: 'kg', prixVente: 0.00, prixAchat: 0.00 },
+  'Regie': { nom: 'Heures de régie', unite: 'h', prixVente: 39.00, prixAchat: 30.00 },
+  'Chapeaux': { nom: 'Chapeaux de poutre', unite: 'u', prixVente: 0.30, prixAchat: 0.20 },
+  'Urgence': { nom: 'Aciers hors délais contractuels', unite: 'kg', prixVente: 0.30, prixAchat: 0.20 },
+  'Auto-D': { nom: 'Transport Auto-D', unite: 'u', prixVente: 780.00, prixAchat: 600.00 },
+  'Etiquettes': { nom: 'Fourniture d\'étiquettes certifiées conforme NF', unite: 'u', prixVente: 0.015, prixAchat: 0.01 },
+  'Livraison': { nom: 'Livraison par camion <3 T', unite: 'u', prixVente: 0.00, prixAchat: 0.00 },
+  'Camion': { nom: 'Livraison petit camion', unite: 'u', prixVente: 250.00, prixAchat: 180.00 },
+  'Exterieur': { nom: 'Acier si extérieur', unite: 'kg', prixVente: 0.650, prixAchat: 0.50 },
+  'Jeton': { nom: 'Jetons de prénum', unite: 'u', prixVente: 0.00, prixAchat: 0.00 },
+  'Assurance': { nom: 'Assurance décennale', unite: '%CA', prixVente: 0.00, prixAchat: 0.00 },
+};
+
 const initialState = {
   plans: [], // Liste des plans (HA ASS, HA CF, TS)
   clients: {}, // Prix par client : { "BATARM": { prixASS: 1.50, prixCF: 1.80, prixTS: 8.00 }, ... }
+  prestations: prestationsDefaut, // Codes prestations avec prix
   articlesManuals: [], // Articles ajoutés manuellement aux situations
   negoce: [], // Articles de négoce
+  // Ressources Humaines
+  salaries: [], // Liste des salariés: { id, nom, prenom, fonction, tauxHoraire, chargesPatronales }
+  affectations: [], // Affectations chantier: { id, salarieId, codeChantier, mois, heures, fraisKm, notesFrais }
+  notesFrais: [], // Notes de frais: { id, salarieId, codeChantier, mois, description, montant, type }
   currentMonth: new Date().toISOString().slice(0, 7), // YYYY-MM
   currentClient: null, // Client sélectionné pour la situation
   currentChantier: null, // Chantier sélectionné pour filtrage
   config: {
     // Prix par défaut (utilisés si pas de prix client spécifique)
-    prixASSDefaut: 1.50, // Prix de vente ASS par kg
+    prixASSDefaut: 1.32, // Prix de vente ASS par kg (HA)
     prixCFDefaut: 1.80, // Prix de vente CF par kg
-    prixTSDefaut: 8.00, // Prix de vente TS par m²
+    prixTSDefaut: 0.40, // Prix de vente TS par kg (Treillis-Pose)
     // Prix d'achat (coûts)
-    coutASS: 1.20,
+    coutASS: 1.00,
     coutCF: 1.40,
-    coutTS: 6.00,
+    coutTS: 0.30,
     // TVA
     tva: 20,
+    // Paramètres RH
+    tauxChargesPatronales: 45, // % de charges patronales
+    tauxFraisKm: 0.55, // € par km
   }
 };
 
@@ -127,6 +159,105 @@ function chantierReducer(state, action) {
       return {
         ...state,
         negoce: state.negoce.filter(n => n.id !== action.payload)
+      };
+
+    // Prestations
+    case 'UPDATE_PRESTATION':
+      return {
+        ...state,
+        prestations: {
+          ...state.prestations,
+          [action.payload.code]: {
+            ...state.prestations[action.payload.code],
+            ...action.payload.data
+          }
+        }
+      };
+
+    case 'ADD_PRESTATION':
+      return {
+        ...state,
+        prestations: {
+          ...state.prestations,
+          [action.payload.code]: action.payload.data
+        }
+      };
+
+    case 'DELETE_PRESTATION': {
+      const newPrestations = { ...state.prestations };
+      delete newPrestations[action.payload];
+      return { ...state, prestations: newPrestations };
+    }
+
+    // Salariés
+    case 'ADD_SALARIE': {
+      const newSalarie = {
+        ...action.payload,
+        id: `sal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      };
+      return { ...state, salaries: [...state.salaries, newSalarie] };
+    }
+
+    case 'UPDATE_SALARIE':
+      return {
+        ...state,
+        salaries: state.salaries.map(s =>
+          s.id === action.payload.id ? { ...s, ...action.payload } : s
+        )
+      };
+
+    case 'DELETE_SALARIE':
+      return {
+        ...state,
+        salaries: state.salaries.filter(s => s.id !== action.payload),
+        affectations: state.affectations.filter(a => a.salarieId !== action.payload),
+        notesFrais: state.notesFrais.filter(n => n.salarieId !== action.payload)
+      };
+
+    // Affectations
+    case 'ADD_AFFECTATION': {
+      const newAffectation = {
+        ...action.payload,
+        id: `aff-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      };
+      return { ...state, affectations: [...state.affectations, newAffectation] };
+    }
+
+    case 'UPDATE_AFFECTATION':
+      return {
+        ...state,
+        affectations: state.affectations.map(a =>
+          a.id === action.payload.id ? { ...a, ...action.payload } : a
+        )
+      };
+
+    case 'DELETE_AFFECTATION':
+      return {
+        ...state,
+        affectations: state.affectations.filter(a => a.id !== action.payload)
+      };
+
+    // Notes de frais
+    case 'ADD_NOTE_FRAIS': {
+      const newNote = {
+        ...action.payload,
+        id: `ndf-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      };
+      return { ...state, notesFrais: [...state.notesFrais, newNote] };
+    }
+
+    case 'UPDATE_NOTE_FRAIS':
+      return {
+        ...state,
+        notesFrais: state.notesFrais.map(n =>
+          n.id === action.payload.id ? { ...n, ...action.payload } : n
+        )
+      };
+
+    case 'DELETE_NOTE_FRAIS':
+      return {
+        ...state,
+        notesFrais: state.notesFrais.filter(n => n.id !== action.payload)
       };
 
     case 'UPDATE_CLIENT_PRIX':

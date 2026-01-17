@@ -839,7 +839,89 @@ body {
 
 /* Analyse Financiere */
 .analyse-financiere h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0;
+}
+
+.analyse-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
   margin-bottom: 1.5rem;
+}
+
+.analyse-controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.costs-breakdown {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.analyse-extremes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.extreme-card {
+  background: var(--surface);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.extreme-card.positive {
+  border-left: 4px solid var(--success-color);
+}
+
+.extreme-card.negative {
+  border-left: 4px solid var(--danger-color);
+}
+
+.extreme-card h4 {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.extreme-name {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.extreme-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.extreme-value.positive {
+  color: var(--success-color);
+}
+
+.extreme-value.negative {
+  color: var(--danger-color);
+}
+
+.extreme-percent {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
 }
 
 .analyse-summary {
@@ -1456,6 +1538,165 @@ body {
   background: #fef2f2;
 }
 
+/* Ressources Humaines */
+.ressources-humaines h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0;
+}
+
+.rh-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.rh-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  background: var(--background);
+}
+
+.tab-btn.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.tab-content {
+  margin-top: 1rem;
+}
+
+.tab-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.form-card {
+  background: var(--surface);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.form-card h3 {
+  margin-bottom: 1rem;
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.rh-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background: var(--surface);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.rh-table th,
+.rh-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.rh-table th {
+  background: var(--background);
+  font-weight: 600;
+}
+
+.rh-table td.amount {
+  text-align: right;
+  font-family: monospace;
+}
+
+.rh-table td.actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.rh-table td.empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 2rem;
+}
+
+.rh-table tfoot tr.total {
+  background: var(--primary-color);
+  color: white;
+}
+
+.debours-summary {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.debours-summary .summary-card.large {
+  background: var(--primary-color);
+  color: white;
+}
+
+.debours-summary .summary-card.large .summary-label {
+  color: rgba(255,255,255,0.8);
+}
+
+/* Badge types */
+.badge-deplacement {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-repas {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge-hebergement {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.badge-materiel {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge-autre {
+  background: #f3f4f6;
+  color: #374151;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .header {
@@ -1481,6 +1722,11 @@ body {
   }
 
   .situation-actions {
+    justify-content: center;
+  }
+
+  .rh-tabs {
+    width: 100%;
     justify-content: center;
   }
 }

@@ -8,6 +8,7 @@ export default function Header({ currentView, setCurrentView }) {
     { id: 'situation', label: 'Situation Client' },
     { id: 'situationChantier', label: 'Situation Chantier' },
     { id: 'negoce', label: 'Négoce' },
+    { id: 'rh', label: 'RH' },
     { id: 'analyse', label: 'Analyse Financière' },
     { id: 'config', label: 'Configuration' },
   ];

@@ -7,6 +7,7 @@ import PlansManager from './components/PlansManager';
 import SituationMensuelle from './components/SituationMensuelle';
 import SituationChantier from './components/SituationChantier';
 import Negoce from './components/Negoce';
+import RessourcesHumaines from './components/RessourcesHumaines';
 import AnalyseFinanciere from './components/AnalyseFinanciere';
 import Configuration from './components/Configuration';
 import './App.css';
@@ -28,6 +29,8 @@ function App() {
         return <SituationChantier />;
       case 'negoce':
         return <Negoce />;
+      case 'rh':
+        return <RessourcesHumaines />;
       case 'analyse':
         return <AnalyseFinanciere />;
       case 'config':
