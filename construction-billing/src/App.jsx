@@ -3,6 +3,7 @@ import { ChantierProvider } from './context/ChantierContext';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import ExcelImport from './components/ExcelImport';
+import Clients from './components/Clients';
 import PlansManager from './components/PlansManager';
 import SituationMensuelle from './components/SituationMensuelle';
 import SituationChantier from './components/SituationChantier';
@@ -21,6 +22,8 @@ function App() {
         return <Dashboard />;
       case 'import':
         return <ExcelImport />;
+      case 'clients':
+        return <Clients />;
       case 'plans':
         return <PlansManager />;
       case 'situation':

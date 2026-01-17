@@ -50,9 +50,15 @@ export default function RessourcesHumaines() {
     affectations.filter(a => !filterMois || a.mois === filterMois).forEach(aff => {
       const salarie = salaries.find(s => s.id === aff.salarieId);
       if (salarie && result[aff.codeChantier]) {
-        const coutSalaire = aff.heures * salarie.tauxHoraire;
-        const charges = coutSalaire * (config.tauxChargesPatronales / 100);
-        const fraisKm = aff.fraisKm * config.tauxFraisKm;
+        const heures = parseFloat(aff.heures) || 0;
+        const tauxHoraire = parseFloat(salarie.tauxHoraire) || 0;
+        const tauxCharges = parseFloat(config.tauxChargesPatronales) || 45;
+        const tauxKm = parseFloat(config.tauxFraisKm) || 0.55;
+        const km = parseFloat(aff.fraisKm) || 0;
+
+        const coutSalaire = heures * tauxHoraire;
+        const charges = coutSalaire * (tauxCharges / 100);
+        const fraisKm = km * tauxKm;
 
         result[aff.codeChantier].salaires += coutSalaire;
         result[aff.codeChantier].charges += charges;
@@ -63,7 +69,7 @@ export default function RessourcesHumaines() {
     // Calcul des notes de frais
     notesFrais.filter(n => !filterMois || n.mois === filterMois).forEach(ndf => {
       if (result[ndf.codeChantier]) {
-        result[ndf.codeChantier].notesFrais += ndf.montant;
+        result[ndf.codeChantier].notesFrais += parseFloat(ndf.montant) || 0;
       }
     });
 
@@ -480,9 +486,15 @@ export default function RessourcesHumaines() {
                 .filter(a => (!filterMois || a.mois === filterMois) && (!filterChantier || a.codeChantier === filterChantier))
                 .map(a => {
                   const salarie = salaries.find(s => s.id === a.salarieId);
-                  const coutSalaire = salarie ? a.heures * salarie.tauxHoraire : 0;
-                  const charges = coutSalaire * (config.tauxChargesPatronales / 100);
-                  const fraisKm = (a.fraisKm || 0) * config.tauxFraisKm;
+                  const heures = parseFloat(a.heures) || 0;
+                  const tauxHoraire = salarie ? (parseFloat(salarie.tauxHoraire) || 0) : 0;
+                  const tauxCharges = parseFloat(config.tauxChargesPatronales) || 45;
+                  const tauxKm = parseFloat(config.tauxFraisKm) || 0.55;
+                  const km = parseFloat(a.fraisKm) || 0;
+
+                  const coutSalaire = heures * tauxHoraire;
+                  const charges = coutSalaire * (tauxCharges / 100);
+                  const fraisKm = km * tauxKm;
                   const total = coutSalaire + charges + fraisKm;
 
                   return (
@@ -490,9 +502,9 @@ export default function RessourcesHumaines() {
                       <td>{a.mois}</td>
                       <td>{getSalarieName(a.salarieId)}</td>
                       <td>{getChantierName(a.codeChantier)}</td>
-                      <td className="amount">{formatNumber(a.heures, 1)}h</td>
+                      <td className="amount">{formatNumber(heures, 1)}h</td>
                       <td className="amount">{formatEuros(coutSalaire + charges)}</td>
-                      <td className="amount">{formatNumber(a.fraisKm || 0, 0)} km</td>
+                      <td className="amount">{formatNumber(km, 0)} km</td>
                       <td className="amount">{formatEuros(fraisKm)}</td>
                       <td className="amount"><strong>{formatEuros(total)}</strong></td>
                       <td className="actions">

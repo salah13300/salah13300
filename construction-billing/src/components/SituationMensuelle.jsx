@@ -14,7 +14,7 @@ import * as XLSX from 'xlsx';
 
 export default function SituationMensuelle() {
   const { state, dispatch } = useChantier();
-  const { plans, clients, prestations, articlesManuals, currentMonth, currentClient, currentChantier, config } = state;
+  const { plans, clients, prestations, articlesManuals, negoce, currentMonth, currentClient, currentChantier, config } = state;
   const printRef = useRef();
 
   const moisDisponibles = useMemo(() => getMoisDisponibles(plans), [plans]);
@@ -41,16 +41,26 @@ export default function SituationMensuelle() {
     // Filtrer les plans du chantier
     const plansChantier = plans.filter(p => p.codeChantier === chantierActif);
 
+    // Récupérer les prix spécifiques au chantier
+    const chantierPrix = clients[clientActif]?.chantiers?.[chantierActif] || {};
+    const prixHAChantier = chantierPrix.prixASS || config.prixASSDefaut;
+    const prixTSChantier = chantierPrix.prixTS || config.prixTSDefaut;
+
     // Grouper par prestation
     const prestationsData = {};
 
     // Initialiser les prestations standard
     Object.entries(prestations).forEach(([code, prestation]) => {
+      // Utiliser le prix du chantier si c'est HA ou TS
+      let prix = prestation.prixVente;
+      if (code === 'HA') prix = prixHAChantier;
+      if (code === 'Treillis-Pose') prix = prixTSChantier;
+
       prestationsData[code] = {
         code,
         designation: prestation.nom,
         unite: prestation.unite,
-        prix: prestation.prixVente,
+        prix: prix,
         cumulPrecedent: { qte: 0, montant: 0 },
         situationMois: { qte: 0, montant: 0 },
         situationCumulee: { qte: 0, montant: 0 }
@@ -64,8 +74,7 @@ export default function SituationMensuelle() {
       const avancementMois = avancementNouveau - avancementAncien;
 
       // HA (ASS + CF combinés)
-      const poidsTotal = (plan.poidsASSCommande || 0) + (plan.poidsCFCommande || 0);
-      const prixHA = prestations['HA']?.prixVente || config.prixASSDefaut;
+      const poidsTotal = (parseFloat(plan.poidsASSCommande) || 0) + (parseFloat(plan.poidsCFCommande) || 0);
 
       if (poidsTotal > 0) {
         const qteAncien = poidsTotal * avancementAncien / 100;
@@ -73,26 +82,29 @@ export default function SituationMensuelle() {
         const qteNouveau = poidsTotal * avancementNouveau / 100;
 
         prestationsData['HA'].cumulPrecedent.qte += qteAncien;
-        prestationsData['HA'].cumulPrecedent.montant += qteAncien * prixHA;
+        prestationsData['HA'].cumulPrecedent.montant += qteAncien * prixHAChantier;
         prestationsData['HA'].situationMois.qte += qteMois;
-        prestationsData['HA'].situationMois.montant += qteMois * prixHA;
+        prestationsData['HA'].situationMois.montant += qteMois * prixHAChantier;
         prestationsData['HA'].situationCumulee.qte += qteNouveau;
-        prestationsData['HA'].situationCumulee.montant += qteNouveau * prixHA;
+        prestationsData['HA'].situationCumulee.montant += qteNouveau * prixHAChantier;
       }
 
-      // Treillis-Pose (si le plan contient du treillis)
-      if (plan.surfaceTS && plan.surfaceTS > 0) {
-        const prixTS = prestations['Treillis-Pose']?.prixVente || config.prixTSDefaut;
-        const qteAncien = plan.surfaceTS * avancementAncien / 100;
-        const qteMois = plan.surfaceTS * avancementMois / 100;
-        const qteNouveau = plan.surfaceTS * avancementNouveau / 100;
+      // Treillis Soudés - poidsTS (en kg) ou surfaceTS
+      const poidsTS = parseFloat(plan.poidsTS) || 0;
+      const surfaceTS = parseFloat(plan.surfaceTS) || 0;
+      const qteTS = poidsTS > 0 ? poidsTS : surfaceTS; // Utiliser poidsTS en priorité
+
+      if (qteTS > 0) {
+        const qteAncien = qteTS * avancementAncien / 100;
+        const qteMois = qteTS * avancementMois / 100;
+        const qteNouveau = qteTS * avancementNouveau / 100;
 
         prestationsData['Treillis-Pose'].cumulPrecedent.qte += qteAncien;
-        prestationsData['Treillis-Pose'].cumulPrecedent.montant += qteAncien * prixTS;
+        prestationsData['Treillis-Pose'].cumulPrecedent.montant += qteAncien * prixTSChantier;
         prestationsData['Treillis-Pose'].situationMois.qte += qteMois;
-        prestationsData['Treillis-Pose'].situationMois.montant += qteMois * prixTS;
+        prestationsData['Treillis-Pose'].situationMois.montant += qteMois * prixTSChantier;
         prestationsData['Treillis-Pose'].situationCumulee.qte += qteNouveau;
-        prestationsData['Treillis-Pose'].situationCumulee.montant += qteNouveau * prixTS;
+        prestationsData['Treillis-Pose'].situationCumulee.montant += qteNouveau * prixTSChantier;
       }
     }
 
@@ -106,19 +118,52 @@ export default function SituationMensuelle() {
       if (article.mois === currentMonth) {
         // Article du mois courant
         if (article.codePrestation && prestationsData[article.codePrestation]) {
-          prestationsData[article.codePrestation].situationMois.qte += article.quantite || 0;
-          prestationsData[article.codePrestation].situationMois.montant += article.montant || 0;
-          prestationsData[article.codePrestation].situationCumulee.qte += article.quantite || 0;
-          prestationsData[article.codePrestation].situationCumulee.montant += article.montant || 0;
+          prestationsData[article.codePrestation].situationMois.qte += parseFloat(article.quantite) || 0;
+          prestationsData[article.codePrestation].situationMois.montant += parseFloat(article.montant) || 0;
+          prestationsData[article.codePrestation].situationCumulee.qte += parseFloat(article.quantite) || 0;
+          prestationsData[article.codePrestation].situationCumulee.montant += parseFloat(article.montant) || 0;
         }
       } else if (article.mois < currentMonth) {
         // Article d'un mois précédent
         if (article.codePrestation && prestationsData[article.codePrestation]) {
-          prestationsData[article.codePrestation].cumulPrecedent.qte += article.quantite || 0;
-          prestationsData[article.codePrestation].cumulPrecedent.montant += article.montant || 0;
-          prestationsData[article.codePrestation].situationCumulee.qte += article.quantite || 0;
-          prestationsData[article.codePrestation].situationCumulee.montant += article.montant || 0;
+          prestationsData[article.codePrestation].cumulPrecedent.qte += parseFloat(article.quantite) || 0;
+          prestationsData[article.codePrestation].cumulPrecedent.montant += parseFloat(article.montant) || 0;
+          prestationsData[article.codePrestation].situationCumulee.qte += parseFloat(article.quantite) || 0;
+          prestationsData[article.codePrestation].situationCumulee.montant += parseFloat(article.montant) || 0;
         }
+      }
+    });
+
+    // Ajouter les articles de négoce pour ce chantier
+    const negoceChantier = negoce.filter(n => n.codeChantier === chantierActif);
+
+    negoceChantier.forEach(article => {
+      // Créer une entrée de prestation pour le négoce si elle n'existe pas
+      const code = `NEGOCE-${article.id}`;
+      const montant = (parseFloat(article.quantite) || 0) * (parseFloat(article.prixUnitaire) || 0);
+
+      if (!prestationsData[code]) {
+        prestationsData[code] = {
+          code: 'NEGOCE',
+          designation: article.designation || 'Article négoce',
+          unite: article.unite || 'u',
+          prix: parseFloat(article.prixUnitaire) || 0,
+          cumulPrecedent: { qte: 0, montant: 0 },
+          situationMois: { qte: 0, montant: 0 },
+          situationCumulee: { qte: 0, montant: 0 }
+        };
+      }
+
+      if (article.mois === currentMonth) {
+        prestationsData[code].situationMois.qte += parseFloat(article.quantite) || 0;
+        prestationsData[code].situationMois.montant += montant;
+        prestationsData[code].situationCumulee.qte += parseFloat(article.quantite) || 0;
+        prestationsData[code].situationCumulee.montant += montant;
+      } else if (article.mois < currentMonth) {
+        prestationsData[code].cumulPrecedent.qte += parseFloat(article.quantite) || 0;
+        prestationsData[code].cumulPrecedent.montant += montant;
+        prestationsData[code].situationCumulee.qte += parseFloat(article.quantite) || 0;
+        prestationsData[code].situationCumulee.montant += montant;
       }
     });
 
@@ -171,7 +216,7 @@ export default function SituationMensuelle() {
       ttc,
       mois: currentMonth
     };
-  }, [plans, chantierActif, currentMonth, prestations, articlesManuals, config, clients, clientActif]);
+  }, [plans, chantierActif, currentMonth, prestations, articlesManuals, negoce, config, clients, clientActif]);
 
   const handleClientChange = (codeClient) => {
     dispatch({ type: 'SET_CURRENT_CLIENT', payload: codeClient });

@@ -28,7 +28,7 @@ const prestationsDefaut = {
 
 const initialState = {
   plans: [], // Liste des plans (HA ASS, HA CF, TS)
-  clients: {}, // Prix par client : { "BATARM": { prixASS: 1.50, prixCF: 1.80, prixTS: 8.00 }, ... }
+  clients: {}, // Prix par client : { "BATARM": { nom, chantiers: { "CHANTIER1": { nom, prixASS, prixCF, prixTS, coutASS, coutCF, coutTS } } } }
   prestations: prestationsDefaut, // Codes prestations avec prix
   articlesManuals: [], // Articles ajoutés manuellement aux situations
   negoce: [], // Articles de négoce
@@ -40,11 +40,11 @@ const initialState = {
   currentClient: null, // Client sélectionné pour la situation
   currentChantier: null, // Chantier sélectionné pour filtrage
   config: {
-    // Prix par défaut (utilisés si pas de prix client spécifique)
+    // Prix par défaut (utilisés si pas de prix client/chantier spécifique)
     prixASSDefaut: 1.32, // Prix de vente ASS par kg (HA)
     prixCFDefaut: 1.80, // Prix de vente CF par kg
-    prixTSDefaut: 0.40, // Prix de vente TS par kg (Treillis-Pose)
-    // Prix d'achat (coûts)
+    prixTSDefaut: 0.40, // Prix de vente TS par kg (Treillis soudés)
+    // Prix d'achat (coûts) par défaut
     coutASS: 1.00,
     coutCF: 1.40,
     coutTS: 0.30,
@@ -66,16 +66,31 @@ function chantierReducer(state, action) {
       const existingKeys = new Set(state.plans.map(p => `${p.code}-${p.numeroPlan}`));
       const newPlans = action.payload.filter(p => !existingKeys.has(`${p.code}-${p.numeroPlan}`));
 
-      // Extraire les clients uniques pour créer les entrées de prix
+      // Extraire les clients et chantiers uniques pour créer les entrées de prix
       const newClients = { ...state.clients };
       newPlans.forEach(p => {
-        if (p.codeClient && !newClients[p.codeClient]) {
-          newClients[p.codeClient] = {
-            nom: p.nomClient,
-            prixASS: state.config.prixASSDefaut,
-            prixCF: state.config.prixCFDefaut,
-            prixTS: state.config.prixTSDefaut,
-          };
+        if (p.codeClient) {
+          // Créer le client s'il n'existe pas
+          if (!newClients[p.codeClient]) {
+            newClients[p.codeClient] = {
+              nom: p.nomClient,
+              chantiers: {}
+            };
+          }
+          // Créer le chantier s'il n'existe pas
+          if (p.codeChantier && !newClients[p.codeClient].chantiers[p.codeChantier]) {
+            newClients[p.codeClient].chantiers[p.codeChantier] = {
+              nom: p.nomChantier,
+              // Prix de vente
+              prixASS: state.config.prixASSDefaut,
+              prixCF: state.config.prixCFDefaut,
+              prixTS: state.config.prixTSDefaut,
+              // Prix d'achat
+              coutASS: state.config.coutASS,
+              coutCF: state.config.coutCF,
+              coutTS: state.config.coutTS,
+            };
+          }
         }
       });
 
@@ -271,6 +286,100 @@ function chantierReducer(state, action) {
           }
         }
       };
+
+    case 'ADD_CLIENT': {
+      const { code, nom } = action.payload;
+      if (state.clients[code]) return state;
+      return {
+        ...state,
+        clients: {
+          ...state.clients,
+          [code]: { nom, chantiers: {} }
+        }
+      };
+    }
+
+    case 'UPDATE_CLIENT':
+      return {
+        ...state,
+        clients: {
+          ...state.clients,
+          [action.payload.code]: {
+            ...state.clients[action.payload.code],
+            nom: action.payload.nom
+          }
+        }
+      };
+
+    case 'DELETE_CLIENT': {
+      const newClients = { ...state.clients };
+      delete newClients[action.payload];
+      return { ...state, clients: newClients };
+    }
+
+    case 'ADD_CHANTIER': {
+      const { codeClient, codeChantier, nom } = action.payload;
+      if (!state.clients[codeClient]) return state;
+      return {
+        ...state,
+        clients: {
+          ...state.clients,
+          [codeClient]: {
+            ...state.clients[codeClient],
+            chantiers: {
+              ...state.clients[codeClient].chantiers,
+              [codeChantier]: {
+                nom,
+                prixASS: state.config.prixASSDefaut,
+                prixCF: state.config.prixCFDefaut,
+                prixTS: state.config.prixTSDefaut,
+                coutASS: state.config.coutASS,
+                coutCF: state.config.coutCF,
+                coutTS: state.config.coutTS,
+              }
+            }
+          }
+        }
+      };
+    }
+
+    case 'UPDATE_CHANTIER_PRIX': {
+      const { codeClient, codeChantier, prix } = action.payload;
+      if (!state.clients[codeClient]?.chantiers?.[codeChantier]) return state;
+      return {
+        ...state,
+        clients: {
+          ...state.clients,
+          [codeClient]: {
+            ...state.clients[codeClient],
+            chantiers: {
+              ...state.clients[codeClient].chantiers,
+              [codeChantier]: {
+                ...state.clients[codeClient].chantiers[codeChantier],
+                ...prix
+              }
+            }
+          }
+        }
+      };
+    }
+
+    case 'DELETE_CHANTIER': {
+      const { codeClient, codeChantier } = action.payload;
+      if (!state.clients[codeClient]) return state;
+      const newChantiers = { ...state.clients[codeClient].chantiers };
+      delete newChantiers[codeChantier];
+      return {
+        ...state,
+        clients: {
+          ...state.clients,
+          [codeClient]: {
+            ...state.clients[codeClient],
+            chantiers: newChantiers
+          }
+        }
+      };
+    }
 
     case 'UPDATE_CONFIG':
       return { ...state, config: { ...state.config, ...action.payload } };

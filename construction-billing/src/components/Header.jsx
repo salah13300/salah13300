@@ -4,6 +4,7 @@ export default function Header({ currentView, setCurrentView }) {
   const navItems = [
     { id: 'dashboard', label: 'Tableau de bord' },
     { id: 'import', label: 'Import Excel' },
+    { id: 'clients', label: 'Clients' },
     { id: 'plans', label: 'Plans' },
     { id: 'situation', label: 'Situation Client' },
     { id: 'situationChantier', label: 'Situation Chantier' },
