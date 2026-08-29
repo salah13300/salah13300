@@ -1,16 +1,14 @@
-import type { Browser } from "playwright-core";
 import { prisma } from "./db";
-import { fetchPricesForModelViaBrowser, launchScraperBrowser, type PriceResult } from "./scraper";
+import { fetchPricesForModel, type PriceResult } from "./scraper";
 import { sendPriceDropAlert } from "./notify";
 import { COUNTRIES, MODELS } from "./countries";
 
 async function checkPricesForModelAndCountry(
-  browser: Browser,
   countryCode: string,
   modelSlug: string,
   currency: string
 ) {
-  const prices: PriceResult[] = await fetchPricesForModelViaBrowser(browser, countryCode, modelSlug);
+  const prices: PriceResult[] = await fetchPricesForModel(countryCode, modelSlug);
 
   for (const price of prices) {
     // 1. Enregistrer le relevé
@@ -73,17 +71,15 @@ export interface CheckAllPricesResult {
   failed: { country: string; model: string; error: string }[];
 }
 
-// Nombre de relevés menés en parallèle (onglets simultanés dans le même
-// navigateur). Fait un pays x modèle à la fois serait beaucoup trop lent
-// (65 relevés séquentiels dépassent largement le temps limite d'une
-// fonction serverless, même à 300s — testé en production). En parallèle,
-// le temps total est divisé par ~CONCURRENCY au lieu de s'additionner.
-const CONCURRENCY = 4;
+// Nombre de relevés menés en parallèle. À ajuster selon la limite de
+// requêtes simultanées de ton plan ScraperAPI (un plan d'entrée autorise
+// généralement 5-10 requêtes concurrentes).
+const CONCURRENCY = 5;
 
 // Parcourt tous les pays/modèles suivis, enregistre les relevés de prix et
 // notifie les abonnés en cas de nouveau plus bas. Utilisé à la fois par le
 // script `check-prices` (exécution manuelle/CI) et par la route
-// `/api/prices/check` (cron Vercel).
+// `/api/prices/check` (cron Vercel, une fois par jour — voir vercel.json).
 export async function checkAllPrices(): Promise<CheckAllPricesResult> {
   const failed: CheckAllPricesResult["failed"] = [];
   let checked = 0;
@@ -92,32 +88,26 @@ export async function checkAllPrices(): Promise<CheckAllPricesResult> {
     MODELS.map((model) => ({ country, model }))
   );
 
-  const browser = await launchScraperBrowser();
+  let nextIndex = 0;
 
-  try {
-    let nextIndex = 0;
-
-    async function worker() {
-      while (nextIndex < tasks.length) {
-        const { country, model } = tasks[nextIndex++];
-        try {
-          await checkPricesForModelAndCountry(browser, country.code, model.slug, country.currency);
-          checked++;
-        } catch (err) {
-          console.error(`Erreur pour ${model.slug}/${country.code}:`, err);
-          failed.push({
-            country: country.code,
-            model: model.slug,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
+  async function worker() {
+    while (nextIndex < tasks.length) {
+      const { country, model } = tasks[nextIndex++];
+      try {
+        await checkPricesForModelAndCountry(country.code, model.slug, country.currency);
+        checked++;
+      } catch (err) {
+        console.error(`Erreur pour ${model.slug}/${country.code}:`, err);
+        failed.push({
+          country: country.code,
+          model: model.slug,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
-
-    await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
-  } finally {
-    await browser.close();
   }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
 
   return { checked, failed };
 }

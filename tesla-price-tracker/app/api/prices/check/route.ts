@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { checkAllPrices } from "@/lib/priceCheck";
 
-// Cette route est appelée périodiquement par le cron (voir vercel.json).
-// 13 pays x 5 modèles = 65 relevés séquentiels, chacun via un navigateur
-// headless (voir lib/scraper.ts) : nécessite largement plus que les 10s par
-// défaut de Vercel. 300s = maximum généralement disponible sur un plan Pro ;
-// si ça ne suffit toujours pas, il faudra répartir les relevés sur plusieurs
-// cron plus fréquents (par pays, par ex.) plutôt que tout faire d'un coup.
-export const maxDuration = 300;
+// Cette route est appelée une fois par jour par le cron (voir vercel.json).
+// 13 pays x 5 modèles = 65 relevés, faits par lots en parallèle
+// (lib/priceCheck.ts) via ScraperAPI : plus léger qu'un navigateur headless,
+// mais toujours plus que les 10s par défaut de Vercel.
+export const maxDuration = 120;
 
 // Les Cron Jobs Vercel déclenchent toujours une requête GET (avec le header
 // Authorization signé automatiquement à partir de la variable d'env

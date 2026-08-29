@@ -39,21 +39,6 @@ const nextConfig = {
       },
     ];
   },
-  experimental: {
-    // Sans ça, Vercel ne détecte pas que /api/prices/check a besoin du
-    // binaire Chromium de @sparticuz/chromium (utilisé pour scraper Tesla
-    // via un vrai navigateur, voir lib/scraper.ts) et ne l'inclut pas dans
-    // le paquet de la fonction serverless déployée — erreur au runtime sinon.
-    outputFileTracingIncludes: {
-      "/api/prices/check": ["./node_modules/@sparticuz/chromium/**"],
-    },
-    // playwright-core référence des dépendances optionnelles non installées
-    // (chromium-bidi, kerberos, ...) que webpack essaie de résoudre au
-    // build et fait échouer. En "external", Next.js les charge directement
-    // via require() au runtime au lieu de les empaqueter — comportement
-    // normal de Node.js qui ignore les dépendances optionnelles absentes.
-    serverComponentsExternalPackages: ["playwright-core", "@sparticuz/chromium"],
-  },
 };
 
 module.exports = withNextIntl(nextConfig);
