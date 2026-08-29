@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
+import { checkAllPrices } from "@/lib/priceCheck";
 
 // Cette route est appelée périodiquement par le cron (voir vercel.json).
-// Elle réutilise la même logique que scripts/check-prices.ts.
-// Pour rester simple, tu peux soit importer directement la logique ici,
-// soit garder le script séparé et l'exécuter via GitHub Actions à la place
-// du cron Vercel (plus flexible, pas de limite de durée d'exécution).
+// 13 pays x 5 modèles = 65 relevés séquentiels, chacun avec un appel réseau
+// vers l'API Tesla : ça peut prendre plus que les 10s par défaut de Vercel.
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   // Sécurité minimale : vérifier un secret partagé pour éviter les appels non autorisés
@@ -13,8 +13,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
 
-  // TODO: appeler ici la même logique que scripts/check-prices.ts
-  // (factoriser dans lib/ si tu veux éviter la duplication)
+  const result = await checkAllPrices();
 
-  return NextResponse.json({ status: "ok" });
+  return NextResponse.json({ status: "ok", ...result });
 }
