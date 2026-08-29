@@ -73,23 +73,33 @@ export interface CheckAllPricesResult {
   failed: { country: string; model: string; error: string }[];
 }
 
+// Nombre de relevés menés en parallèle (onglets simultanés dans le même
+// navigateur). Fait un pays x modèle à la fois serait beaucoup trop lent
+// (65 relevés séquentiels dépassent largement le temps limite d'une
+// fonction serverless, même à 300s — testé en production). En parallèle,
+// le temps total est divisé par ~CONCURRENCY au lieu de s'additionner.
+const CONCURRENCY = 6;
+
 // Parcourt tous les pays/modèles suivis, enregistre les relevés de prix et
 // notifie les abonnés en cas de nouveau plus bas. Utilisé à la fois par le
 // script `check-prices` (exécution manuelle/CI) et par la route
 // `/api/prices/check` (cron Vercel).
-//
-// Un seul navigateur headless est lancé et réutilisé pour les 65 relevés
-// (13 pays x 5 modèles) — le lancer à chaque fois serait beaucoup trop lent
-// pour tenir dans le temps d'exécution d'une fonction serverless.
 export async function checkAllPrices(): Promise<CheckAllPricesResult> {
   const failed: CheckAllPricesResult["failed"] = [];
   let checked = 0;
 
+  const tasks = COUNTRIES.flatMap((country) =>
+    MODELS.map((model) => ({ country, model }))
+  );
+
   const browser = await launchScraperBrowser();
 
   try {
-    for (const country of COUNTRIES) {
-      for (const model of MODELS) {
+    let nextIndex = 0;
+
+    async function worker() {
+      while (nextIndex < tasks.length) {
+        const { country, model } = tasks[nextIndex++];
         try {
           await checkPricesForModelAndCountry(browser, country.code, model.slug, country.currency);
           checked++;
@@ -103,6 +113,8 @@ export async function checkAllPrices(): Promise<CheckAllPricesResult> {
         }
       }
     }
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
   } finally {
     await browser.close();
   }
