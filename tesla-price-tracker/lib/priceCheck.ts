@@ -71,10 +71,11 @@ export interface CheckAllPricesResult {
   failed: { country: string; model: string; error: string }[];
 }
 
-// Nombre de relevés menés en parallèle. À ajuster selon la limite de
-// requêtes simultanées de ton plan ScraperAPI (un plan d'entrée autorise
-// généralement 5-10 requêtes concurrentes).
-const CONCURRENCY = 10;
+// Nombre de relevés menés en parallèle. Un plan d'entrée/essai ScraperAPI
+// autorise en général peu de requêtes simultanées — 10 a déclenché des 429
+// ("trop de requêtes") en production. À ajuster à la hausse si ton plan le
+// permet (voir le dashboard ScraperAPI pour la limite exacte de ton plan).
+const CONCURRENCY = 3;
 
 // Parcourt tous les pays/modèles suivis, enregistre les relevés de prix et
 // notifie les abonnés en cas de nouveau plus bas. Utilisé à la fois par le

@@ -128,6 +128,10 @@ function buildTeslaApiUrl(countryCode: string, modelSlug: string): string {
   return `${INVENTORY_API_URL}?query=${encodeURIComponent(JSON.stringify(query))}`;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function fetchPricesForModel(
   countryCode: string,
   modelSlug: string
@@ -140,15 +144,25 @@ export async function fetchPricesForModel(
   const targetUrl = buildTeslaApiUrl(countryCode, modelSlug);
   const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}`;
 
-  // Sans limite explicite, une requête qui traîne peut bloquer tout un
-  // "créneau" de la concurrence dans checkAllPrices bien au-delà de son
-  // temps normal, ce qui a fait dépasser le temps d'exécution total en
-  // production. 25s est déjà généreux pour un simple appel API relayé.
-  const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(25000) });
+  let response: Response | undefined;
 
-  if (!response.ok) {
+  // 429 = trop de requêtes simultanées pour le plan ScraperAPI en cours.
+  // Sur un pic temporaire (plusieurs relevés qui démarrent au même moment),
+  // patienter puis réessayer suffit généralement — pas la peine d'échouer
+  // tout de suite.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // Sans limite explicite, une requête qui traîne peut bloquer tout un
+    // "créneau" de la concurrence dans checkAllPrices bien au-delà de son
+    // temps normal. 25s est déjà généreux pour un simple appel API relayé.
+    response = await fetch(proxyUrl, { signal: AbortSignal.timeout(25000) });
+
+    if (response.status !== 429) break;
+    await sleep(2000 * (attempt + 1));
+  }
+
+  if (!response || !response.ok) {
     throw new Error(
-      `Échec de récupération des prix pour ${modelSlug}/${countryCode}: ${response.status}`
+      `Échec de récupération des prix pour ${modelSlug}/${countryCode}: ${response?.status}`
     );
   }
 
