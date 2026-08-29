@@ -121,7 +121,8 @@ export async function checkAllPrices(): Promise<CheckPricesResult> {
 }
 
 // Ne vérifie qu'un seul pays (5 modèles) — taille de lot adaptée à une
-// fonction serverless avec un temps d'exécution limité.
+// fonction serverless avec un temps d'exécution limité. Utilisé par le
+// script `check-prices` (pas de contrainte de temps).
 export async function checkPricesForCountry(countryCode: string): Promise<CheckPricesResult> {
   const country = COUNTRIES.find((c) => c.code === countryCode);
   if (!country) {
@@ -129,5 +130,26 @@ export async function checkPricesForCountry(countryCode: string): Promise<CheckP
   }
 
   const tasks = MODELS.map((model) => ({ country, model }));
+  return runChecks(tasks);
+}
+
+// Ne vérifie qu'un sous-ensemble de modèles pour un pays. Utilisé par la
+// route cron en production : vérifié le 29/08/2026 que 5 modèles en une
+// seule invocation (CONCURRENCY=3, donc 2 vagues) échouent parfois par
+// timeout même après optimisation des tentatives — la latence de
+// ScraperAPI/Tesla est trop variable pour tenir de façon fiable dans
+// maxDuration (290s). En répartissant les 5 modèles d'un pays sur 2 crons
+// (voir vercel.json), chaque invocation garde une marge confortable.
+export async function checkPricesForCountryModels(
+  countryCode: string,
+  modelSlugs: string[]
+): Promise<CheckPricesResult> {
+  const country = COUNTRIES.find((c) => c.code === countryCode);
+  if (!country) {
+    throw new Error(`Pays inconnu: ${countryCode}`);
+  }
+
+  const models = MODELS.filter((m) => modelSlugs.includes(m.slug));
+  const tasks = models.map((model) => ({ country, model }));
   return runChecks(tasks);
 }

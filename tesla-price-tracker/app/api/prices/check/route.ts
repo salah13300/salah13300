@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { checkAllPrices, checkPricesForCountry } from "@/lib/priceCheck";
-import { countrySchema } from "@/lib/validation";
+import { checkAllPrices, checkPricesForCountry, checkPricesForCountryModels } from "@/lib/priceCheck";
+import { countrySchema, modelsListSchema } from "@/lib/validation";
 
 // Cette route est appelée par le cron (voir vercel.json) : un cron par pays,
 // staggerés dans le temps, plutôt qu'un seul cron qui ferait les 13 pays x 5
@@ -21,12 +21,31 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const countryParam = searchParams.get("country");
+  const modelsParam = searchParams.get("models");
 
   if (countryParam) {
     const parsed = countrySchema.safeParse(countryParam);
     if (!parsed.success) {
       return NextResponse.json({ error: "Paramètre 'country' invalide" }, { status: 400 });
     }
+
+    // 'models' optionnel : ne vérifie qu'un sous-ensemble des 5 modèles du
+    // pays (voir vercel.json, un pays est réparti sur 2 crons pour rester
+    // dans le budget de temps — voir lib/priceCheck.ts).
+    if (modelsParam) {
+      const parsedModels = modelsListSchema.safeParse(modelsParam);
+      if (!parsedModels.success) {
+        return NextResponse.json({ error: "Paramètre 'models' invalide" }, { status: 400 });
+      }
+      const result = await checkPricesForCountryModels(parsed.data, parsedModels.data);
+      return NextResponse.json({
+        status: "ok",
+        country: parsed.data,
+        models: parsedModels.data,
+        ...result,
+      });
+    }
+
     const result = await checkPricesForCountry(parsed.data);
     return NextResponse.json({ status: "ok", country: parsed.data, ...result });
   }
