@@ -3,9 +3,10 @@ import { checkAllPrices } from "@/lib/priceCheck";
 
 // Cette route est appelée une fois par jour par le cron (voir vercel.json).
 // 13 pays x 5 modèles = 65 relevés, faits par lots en parallèle
-// (lib/priceCheck.ts) via ScraperAPI : plus léger qu'un navigateur headless,
-// mais toujours plus que les 10s par défaut de Vercel.
-export const maxDuration = 120;
+// (lib/priceCheck.ts) via ScraperAPI. Chaque appel relayé via une IP
+// résidentielle prend plusieurs secondes (constaté en prod : 120s ne
+// suffisaient pas) — largement plus que les 10s par défaut de Vercel.
+export const maxDuration = 300;
 
 // Les Cron Jobs Vercel déclenchent toujours une requête GET (avec le header
 // Authorization signé automatiquement à partir de la variable d'env
