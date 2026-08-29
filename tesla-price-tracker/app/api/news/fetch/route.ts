@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { fetchDailyNews } from "@/lib/news";
 
-// Appelée une fois par jour par le cron Vercel (voir vercel.json)
-export async function POST(request: Request) {
+// Appelée une fois par jour par le cron Vercel (voir vercel.json).
+// Les Cron Jobs Vercel déclenchent toujours une requête GET (avec le header
+// Authorization signé automatiquement à partir de la variable d'env
+// CRON_SECRET) — jamais POST, même si le vercel.json ne le précise pas.
+export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });

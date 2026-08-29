@@ -6,7 +6,10 @@ import { checkAllPrices } from "@/lib/priceCheck";
 // vers l'API Tesla : ça peut prendre plus que les 10s par défaut de Vercel.
 export const maxDuration = 60;
 
-export async function POST(request: Request) {
+// Les Cron Jobs Vercel déclenchent toujours une requête GET (avec le header
+// Authorization signé automatiquement à partir de la variable d'env
+// CRON_SECRET) — jamais POST, même si le vercel.json ne le précise pas.
+export async function GET(request: Request) {
   // Sécurité minimale : vérifier un secret partagé pour éviter les appels non autorisés
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
