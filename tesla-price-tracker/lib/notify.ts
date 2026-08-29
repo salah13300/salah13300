@@ -51,7 +51,7 @@ export async function sendMagicLinkEmail(params: { to: string; url: string }) {
   await resend.emails.send({
     from: "onboarding@resend.dev",
     to: params.to,
-    subject: "Ton lien de connexion — Tesla Price Tracker",
+    subject: "Ton lien de connexion — EV Price Watch",
     html: `
       <p>Clique sur le lien ci-dessous pour accéder à ton compte (valable 15 minutes) :</p>
       <p><a href="${params.url}">${params.url}</a></p>

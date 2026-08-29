@@ -12,7 +12,7 @@ import { DashPanel } from "./components/DashPanel";
 const productJsonLd = {
   "@context": "https://schema.org",
   "@type": "Product",
-  name: "Tesla Price Tracker — abonnement",
+  name: "EV Price Watch — abonnement",
   description:
     "Alertes email sur les baisses de prix Tesla et fil d'actus Tesla quotidien.",
   offers: {

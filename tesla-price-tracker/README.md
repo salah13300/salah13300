@@ -1,4 +1,4 @@
-# Tesla Price Tracker
+# EV Price Watch
 
 Application web qui suit l'évolution des prix des Tesla neuves (tous modèles,
 plusieurs pays), affiche l'historique, et envoie une alerte email quand un

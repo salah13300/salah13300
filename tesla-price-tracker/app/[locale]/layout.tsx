@@ -10,7 +10,7 @@ const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 const organizationJsonLd = {
   "@context": "https://schema.org",
   "@type": "Organization",
-  name: "Tesla Price Tracker",
+  name: "EV Price Watch",
   url: APP_URL,
 };
 
@@ -38,7 +38,7 @@ export async function generateMetadata({
       title: t("title"),
       description: t("description"),
       url: `${APP_URL}/${locale}`,
-      siteName: "Tesla Price Tracker",
+      siteName: "EV Price Watch",
       locale,
       type: "website",
     },

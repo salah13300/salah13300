@@ -22,7 +22,7 @@ export function SiteHeader() {
       <div className="site-header-inner">
         <Link href={`/${locale}`} className="wordmark">
           <span className="dot" />
-          Tesla Price Tracker
+          EV Price Watch
         </Link>
         <nav className="site-nav" style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <select
