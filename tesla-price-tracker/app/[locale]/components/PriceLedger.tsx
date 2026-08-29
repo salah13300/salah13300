@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { MODELS } from "@/lib/countries";
 
 interface LedgerEntry {
   model: string;
@@ -11,13 +13,36 @@ interface LedgerEntry {
 }
 
 export function PriceLedger({ country }: { country: string }) {
+  const t = useTranslations("home");
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     fetch(`/api/prices/latest?country=${country}`)
       .then((res) => res.json())
-      .then((json) => setEntries(json.models ?? []));
+      .then((json) => setEntries(json.models ?? []))
+      .catch(() => setEntries([]))
+      .finally(() => setLoading(false));
   }, [country]);
+
+  if (loading) {
+    return (
+      <div className="ledger">
+        {MODELS.map((model) => (
+          <div className="ledger-cell" key={model.slug}>
+            <div className="ledger-model">{model.name}</div>
+            <div className="ledger-price-row">
+              <span className="signal-dot neutral" />
+              <span className="ledger-price skeleton" style={{ width: 72, height: 19 }}>
+                &nbsp;
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="ledger">
@@ -41,7 +66,7 @@ export function PriceLedger({ country }: { country: string }) {
                     currency: entry.currency ?? "EUR",
                     maximumFractionDigits: 0,
                   })
-                : "en attente"}
+                : t("ledgerPending")}
             </span>
           </div>
         </div>

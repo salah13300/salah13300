@@ -18,6 +18,7 @@
     "dashReading": "model{plural} at their lowest out of {total} tracked",
     "dashLive": "live",
     "dashUpdate": "updated several times a day",
+    "ledgerPending": "pending",
     "freeSection": "Free access",
     "freeTitle": "Latest Tesla news",
     "freeCtaLine1": "This is just a preview.",
