@@ -9,6 +9,25 @@ import { SiteHeader } from "./components/SiteHeader";
 import { NewsTeaser } from "./components/NewsTeaser";
 import { DashPanel } from "./components/DashPanel";
 
+const productJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Product",
+  name: "Tesla Price Tracker — abonnement",
+  description:
+    "Alertes email sur les baisses de prix Tesla et fil d'actus Tesla quotidien.",
+  offers: {
+    "@type": "Offer",
+    price: "3.99",
+    priceCurrency: "EUR",
+    priceSpecification: {
+      "@type": "UnitPriceSpecification",
+      price: "3.99",
+      priceCurrency: "EUR",
+      billingDuration: "P1M",
+    },
+  },
+};
+
 export default function HomePage() {
   const t = useTranslations("home");
   const locale = useLocale();
@@ -54,6 +73,10 @@ export default function HomePage() {
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
+      />
       <SiteHeader />
       <main className="shell">
         <div className="hero-grid">

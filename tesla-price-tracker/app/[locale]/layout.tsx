@@ -1,16 +1,53 @@
 import "./globals.css";
+import type { Metadata } from "next";
 import { NextIntlClientProvider } from "next-intl";
-import { getMessages } from "next-intl/server";
+import { getMessages, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { locales } from "@/i18n/config";
 
-export const metadata = {
-  title: "Tesla Price Tracker",
-  description: "Suivi des prix des Tesla neuves, tous modèles, tous pays",
+const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+
+const organizationJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "Tesla Price Tracker",
+  url: APP_URL,
 };
 
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
+}
+
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
+  const t = await getTranslations({ locale, namespace: "metadata" });
+  const languages = Object.fromEntries(locales.map((l) => [l, `${APP_URL}/${l}`]));
+
+  return {
+    metadataBase: new URL(APP_URL),
+    title: t("title"),
+    description: t("description"),
+    alternates: {
+      canonical: `${APP_URL}/${locale}`,
+      languages,
+    },
+    openGraph: {
+      title: t("title"),
+      description: t("description"),
+      url: `${APP_URL}/${locale}`,
+      siteName: "Tesla Price Tracker",
+      locale,
+      type: "website",
+    },
+    twitter: {
+      card: "summary",
+      title: t("title"),
+      description: t("description"),
+    },
+  };
 }
 
 export default async function LocaleLayout({
@@ -36,6 +73,12 @@ export default async function LocaleLayout({
         <link
           href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
           rel="stylesheet"
+        />
+        <script
+          type="application/ld+json"
+          // Données structurées statiques, générées côté serveur — pas
+          // d'entrée utilisateur ici, dangerouslySetInnerHTML est sûr.
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
         />
       </head>
       <body>

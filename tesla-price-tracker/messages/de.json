@@ -1,4 +1,8 @@
 {
+  "metadata": {
+    "title": "Tesla Price Tracker — Tesla-Neupreise in Europa im Blick",
+    "description": "Tägliche Preisverfolgung für Tesla Model 3, Model Y, Model S, Model X und Cybertruck in 13 europäischen Ländern. E-Mail-Alarm, sobald ein Preis einen neuen Tiefststand erreicht."
+  },
   "nav": {
     "account": "Mein Konto"
   },
