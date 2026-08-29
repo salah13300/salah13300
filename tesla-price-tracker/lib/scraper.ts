@@ -4,29 +4,26 @@
  * Endpoint et forme de requête VÉRIFIÉS le 29/08/2026 par capture DevTools
  * d'une vraie requête réussie faite par tesla.com/fr_fr/inventory/new/m3
  * (onglet Network, filtre Fetch/XHR, requête "inventory-results", status
- * 200). Contrairement à une version précédente de ce fichier, basée sur des
- * projets open source non vérifiés directement, celle-ci reproduit une
- * requête réelle capturée dans le navigateur.
+ * 200) : /inventory/api/v4/inventory-results, réponse dans
+ * results.exact[]/results.approximate[].
  *
- * Deux points à surveiller si Tesla change son site :
- * - Le "super_region" observé était "north america" même pour une recherche
- *   en France — ça semble être une valeur fixe côté frontend Tesla plutôt
- *   qu'une vraie régionalisation, reproduite ici telle quelle.
- * - Le code postal ("zip") par pays (lib/countries.ts) fixe le point de
- *   recherche ; combiné à un "range" (rayon, probablement en km) large pour
- *   couvrir tout le pays plutôt qu'un seul point précis. Les codes postaux
- *   n'ont été vérifiés qu'un par un pour la France dans la capture d'origine
- *   — à ajuster si un marché renvoie 0 résultat de façon persistante.
+ * Un fetch() serveur direct vers cet endpoint (voir `fetchPricesForModel`
+ * ci-dessous), même avec les en-têtes exacts observés dans la vraie
+ * requête (Referer compris), s'est fait bloquer par un 403 systématique une
+ * fois déployé sur Vercel. Ce n'est donc pas un problème d'en-têtes
+ * manquants mais du blocage anti-bot Akamai de Tesla au niveau de la
+ * connexion elle-même (empreinte TLS, réputation de l'IP du datacenter).
  *
- * Important : Tesla protège ses endpoints avec Akamai Bot Manager. Un fetch
- * serveur "nu" (sans les en-têtes ci-dessous, notamment Referer) s'est fait
- * bloquer avec un 403 systématique lors du premier test en production. Les
- * en-têtes ajoutés ici reproduisent ceux observés dans la requête réelle du
- * navigateur ; si les blocages reprennent (usage élevé, changement de
- * politique anti-bot Tesla), il faudra probablement espacer les appels ou
- * passer par un navigateur headless (Playwright) pour ce cron.
+ * `fetchPricesForModelViaBrowser` contourne ça en faisant faire la requête
+ * par un vrai Chromium headless (Playwright + @sparticuz/chromium, conçu
+ * pour tourner dans une fonction serverless Vercel) qui charge la vraie
+ * page du configurateur et intercepte sa réponse réseau — c'est la
+ * fonction utilisée par lib/priceCheck.ts. Non garanti à 100% : Tesla peut
+ * quand même bloquer si l'IP du datacenter Vercel est elle-même repérée,
+ * indépendamment du fait que ce soit un vrai navigateur.
  */
 
+import type { Browser, Page } from "playwright-core";
 import { COUNTRIES, MODELS } from "./countries";
 
 export interface PriceResult {
@@ -35,50 +32,6 @@ export interface PriceResult {
   trim: string;
   priceCents: number;
   currency: string;
-}
-
-const INVENTORY_API_URL = "https://www.tesla.com/inventory/api/v4/inventory-results";
-
-function buildPriceRequestUrl(countryCode: string, modelSlug: string): string {
-  const country = COUNTRIES.find((c) => c.code === countryCode);
-  const model = MODELS.find((m) => m.slug === modelSlug);
-
-  if (!country || !model) {
-    throw new Error(`Pays ou modèle inconnu: ${countryCode}/${modelSlug}`);
-  }
-
-  const query = {
-    query: {
-      model: model.teslaModel,
-      condition: "new",
-      options: {},
-      arrangeby: "Price",
-      order: "asc",
-      market: country.teslaMarket,
-      language: country.teslaLanguage,
-      // Valeur fixe observée dans la vraie requête, quel que soit le pays —
-      // voir le commentaire en tête de fichier.
-      super_region: "north america",
-      PaymentType: "cash",
-      paymentRange: "0,999999",
-      lng: country.anchor.lng,
-      lat: country.anchor.lat,
-      zip: country.anchor.zip,
-      // Rayon de recherche large (au lieu du 0 observé dans la capture, qui
-      // limite au strict voisinage du code postal) pour capter les
-      // véhicules disponibles dans tout le pays.
-      range: 200,
-      region: country.teslaMarket,
-    },
-    offset: 0,
-    count: 50,
-    outsideOffset: 0,
-    outsideSearch: false,
-    isFalconDeliverySelectionEnabled: true,
-    version: "v2",
-  };
-
-  return `${INVENTORY_API_URL}?query=${encodeURIComponent(JSON.stringify(query))}`;
 }
 
 interface InventoryItem {
@@ -133,6 +86,118 @@ function parsePriceResponse(
   return results;
 }
 
+function inventoryPageUrl(countryCode: string, modelSlug: string): string {
+  const country = COUNTRIES.find((c) => c.code === countryCode);
+  const model = MODELS.find((m) => m.slug === modelSlug);
+
+  if (!country || !model) {
+    throw new Error(`Pays ou modèle inconnu: ${countryCode}/${modelSlug}`);
+  }
+
+  const locale = `${country.teslaLanguage}_${country.teslaMarket}`;
+  const params = new URLSearchParams({
+    arrangeby: "plh",
+    zip: country.anchor.zip,
+    range: "200",
+    PaymentType: "cash",
+  });
+
+  return `https://www.tesla.com/${locale}/inventory/new/${model.teslaModel}?${params}`;
+}
+
+// --- Approche navigateur headless (utilisée en production) ---------------
+
+export async function launchScraperBrowser(): Promise<Browser> {
+  const [{ chromium: playwrightChromium }, sparticuzChromium] = await Promise.all([
+    import("playwright-core"),
+    import("@sparticuz/chromium").then((m) => m.default),
+  ]);
+
+  return playwrightChromium.launch({
+    args: sparticuzChromium.args,
+    executablePath: await sparticuzChromium.executablePath(),
+    headless: true,
+  });
+}
+
+// Charge la vraie page du configurateur Tesla dans le navigateur fourni et
+// intercepte la réponse réseau de l'appel "inventory-results" qu'elle
+// déclenche elle-même — reproduit ainsi une requête de navigateur
+// authentique plutôt que d'appeler l'API directement.
+export async function fetchPricesForModelViaBrowser(
+  browser: Browser,
+  countryCode: string,
+  modelSlug: string
+): Promise<PriceResult[]> {
+  const page: Page = await browser.newPage();
+
+  try {
+    // On n'attend PAS le chargement complet de la page (elle continue de
+    // charger pubs/analytics longtemps après) : juste la réponse réseau
+    // précise qui nous intéresse, beaucoup plus rapide vu qu'on répète ça
+    // 65 fois dans le temps limité d'une fonction serverless.
+    const responsePromise = page.waitForResponse(
+      (response) => response.url().includes("inventory-results") && response.ok(),
+      { timeout: 20000 }
+    );
+
+    await page.goto(inventoryPageUrl(countryCode, modelSlug), {
+      waitUntil: "domcontentloaded",
+      timeout: 20000,
+    });
+
+    const response = await responsePromise;
+    const captured = (await response.json()) as InventoryResponse;
+
+    return parsePriceResponse(captured, countryCode, modelSlug);
+  } finally {
+    await page.close();
+  }
+}
+
+// --- Approche fetch() direct (conservée pour référence / tests locaux) ---
+// Fonctionne en local (accès réseau normal) mais se fait bloquer (403) une
+// fois déployée sur Vercel — voir le commentaire en tête de fichier.
+
+const INVENTORY_API_URL = "https://www.tesla.com/inventory/api/v4/inventory-results";
+
+function buildPriceRequestUrl(countryCode: string, modelSlug: string): string {
+  const country = COUNTRIES.find((c) => c.code === countryCode);
+  const model = MODELS.find((m) => m.slug === modelSlug);
+
+  if (!country || !model) {
+    throw new Error(`Pays ou modèle inconnu: ${countryCode}/${modelSlug}`);
+  }
+
+  const query = {
+    query: {
+      model: model.teslaModel,
+      condition: "new",
+      options: {},
+      arrangeby: "Price",
+      order: "asc",
+      market: country.teslaMarket,
+      language: country.teslaLanguage,
+      super_region: "north america",
+      PaymentType: "cash",
+      paymentRange: "0,999999",
+      lng: country.anchor.lng,
+      lat: country.anchor.lat,
+      zip: country.anchor.zip,
+      range: 200,
+      region: country.teslaMarket,
+    },
+    offset: 0,
+    count: 50,
+    outsideOffset: 0,
+    outsideSearch: false,
+    isFalconDeliverySelectionEnabled: true,
+    version: "v2",
+  };
+
+  return `${INVENTORY_API_URL}?query=${encodeURIComponent(JSON.stringify(query))}`;
+}
+
 export async function fetchPricesForModel(
   countryCode: string,
   modelSlug: string
@@ -144,17 +209,12 @@ export async function fetchPricesForModel(
     throw new Error(`Pays ou modèle inconnu: ${countryCode}/${modelSlug}`);
   }
 
-  const url = buildPriceRequestUrl(countryCode, modelSlug);
-  const refererLocale = `${country.teslaLanguage}_${country.teslaMarket}`;
-
-  const response = await fetch(url, {
+  const response = await fetch(buildPriceRequestUrl(countryCode, modelSlug), {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
       Accept: "application/json, text/plain, */*",
-      // Observé comme présent sur la requête réelle — probablement vérifié
-      // par la protection anti-bot de Tesla.
-      Referer: `https://www.tesla.com/${refererLocale}/inventory/new/${model.teslaModel}?arrangeby=plh&zip=${country.anchor.zip}&PaymentType=cash`,
+      Referer: inventoryPageUrl(countryCode, modelSlug),
     },
   });
 

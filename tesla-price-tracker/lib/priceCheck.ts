@@ -1,14 +1,16 @@
+import type { Browser } from "playwright-core";
 import { prisma } from "./db";
-import { fetchPricesForModel } from "./scraper";
+import { fetchPricesForModelViaBrowser, launchScraperBrowser, type PriceResult } from "./scraper";
 import { sendPriceDropAlert } from "./notify";
 import { COUNTRIES, MODELS } from "./countries";
 
 async function checkPricesForModelAndCountry(
+  browser: Browser,
   countryCode: string,
   modelSlug: string,
   currency: string
 ) {
-  const prices = await fetchPricesForModel(countryCode, modelSlug);
+  const prices: PriceResult[] = await fetchPricesForModelViaBrowser(browser, countryCode, modelSlug);
 
   for (const price of prices) {
     // 1. Enregistrer le relevé
@@ -75,24 +77,34 @@ export interface CheckAllPricesResult {
 // notifie les abonnés en cas de nouveau plus bas. Utilisé à la fois par le
 // script `check-prices` (exécution manuelle/CI) et par la route
 // `/api/prices/check` (cron Vercel).
+//
+// Un seul navigateur headless est lancé et réutilisé pour les 65 relevés
+// (13 pays x 5 modèles) — le lancer à chaque fois serait beaucoup trop lent
+// pour tenir dans le temps d'exécution d'une fonction serverless.
 export async function checkAllPrices(): Promise<CheckAllPricesResult> {
   const failed: CheckAllPricesResult["failed"] = [];
   let checked = 0;
 
-  for (const country of COUNTRIES) {
-    for (const model of MODELS) {
-      try {
-        await checkPricesForModelAndCountry(country.code, model.slug, country.currency);
-        checked++;
-      } catch (err) {
-        console.error(`Erreur pour ${model.slug}/${country.code}:`, err);
-        failed.push({
-          country: country.code,
-          model: model.slug,
-          error: err instanceof Error ? err.message : String(err),
-        });
+  const browser = await launchScraperBrowser();
+
+  try {
+    for (const country of COUNTRIES) {
+      for (const model of MODELS) {
+        try {
+          await checkPricesForModelAndCountry(browser, country.code, model.slug, country.currency);
+          checked++;
+        } catch (err) {
+          console.error(`Erreur pour ${model.slug}/${country.code}:`, err);
+          failed.push({
+            country: country.code,
+            model: model.slug,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     }
+  } finally {
+    await browser.close();
   }
 
   return { checked, failed };
