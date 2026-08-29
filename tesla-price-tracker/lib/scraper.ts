@@ -184,8 +184,13 @@ export async function fetchPricesForModel(
   }
 
   if (!response.ok) {
+    // Le corps de la réponse (tronqué) donne souvent la vraie raison côté
+    // ScraperAPI (clé invalide, quota épuisé, cible injoignable...) — un
+    // simple code de statut ne suffisait pas à diagnostiquer un 500
+    // systématique (voir workflow GitHub Actions du 29/08/2026).
+    const body = await response.text().catch(() => "");
     throw new Error(
-      `Échec de récupération des prix pour ${modelSlug}/${countryCode}: ${response.status}`
+      `Échec de récupération des prix pour ${modelSlug}/${countryCode}: ${response.status} ${body.slice(0, 300)}`
     );
   }
 
