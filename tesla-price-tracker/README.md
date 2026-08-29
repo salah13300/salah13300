@@ -40,7 +40,13 @@ npm run dev
 
 1. Créer une base Postgres sur Neon, copier l'URL dans `DATABASE_URL`
 2. Créer un compte [Resend](https://resend.com), copier la clé API
-3. Déployer sur Vercel (`vercel deploy`)
+3. Déployer sur Vercel :
+   - Ce repo contient plusieurs projets — dans les réglages du projet
+     Vercel, mettre **Root Directory** sur `tesla-price-tracker`
+   - **Build Command** (override) : `npx prisma migrate deploy && next build`
+     — applique automatiquement le schéma Prisma à chaque déploiement
+   - Renseigner toutes les variables de `.env.example` dans les
+     "Environment Variables" du projet
 4. Configurer un Cron Vercel (`vercel.json`) qui appelle
    `POST /api/prices/check` toutes les 2h — voir `vercel.json`
 
