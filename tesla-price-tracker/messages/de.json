@@ -1,0 +1,59 @@
+{
+  "nav": {
+    "account": "Mein Konto"
+  },
+  "home": {
+    "eyebrow": "Tägliche Überwachung · alle Märkte",
+    "title1": "Kaufe deine Tesla",
+    "title2": "zum richtigen Preis, nie aufs Geratewohl.",
+    "subtitle": "Tesla ändert seine Preise ohne Vorwarnung. Wir prüfen den Preis jedes Modells mehrmals täglich und benachrichtigen dich, sobald ein neuer Tiefststand erreicht wird.",
+    "statModels": "verfolgte Modelle",
+    "statCountries": "abgedeckte Länder",
+    "statPrice": "pro Monat",
+    "dashLabel": "Preisradar",
+    "dashReading": "Modell{plural} auf Tiefststand von {total} verfolgten",
+    "dashLive": "live",
+    "dashUpdate": "mehrmals täglich aktualisiert",
+    "freeSection": "Frei zugänglich",
+    "freeTitle": "Die neuesten Tesla-News",
+    "freeCtaLine1": "Das ist nur eine Vorschau.",
+    "freeCtaLine2": "Abonnenten erhalten den vollständigen Feed jeden Tag, plus Preistiefstand-Alarme.",
+    "actionSection": "Abo & Alarme",
+    "actionTitle": "Jetzt aktiv werden",
+    "pricePerMonth": "/ Monat, jederzeit kündbar",
+    "featureAlerts": "Preistiefstand-Alarme",
+    "featureAlertsValue": "unbegrenzt",
+    "featureCoverage": "Verfolgte Modelle & Länder",
+    "featureCoverageValue": "alle",
+    "featureNews": "Tesla-News",
+    "featureNewsValue": "täglich, vollständiger Feed",
+    "emailLabel": "E-Mail",
+    "startSubscription": "Abo starten",
+    "orJustAlert": "Oder nur einen Alarm",
+    "countryLabel": "Land",
+    "modelLabel": "Modell",
+    "activateAlert": "Alarm aktivieren",
+    "historySection": "Verlauf",
+    "checkoutRedirect": "Weiterleitung zur Zahlung…",
+    "checkoutError": "Fehler, bitte später erneut versuchen.",
+    "alertSending": "Wird gesendet…",
+    "alertSuccess": "Alarm aktiviert. Du wirst beim nächsten Tiefststand benachrichtigt.",
+    "footerLink": "Schon abonniert? Zu meinem Konto und den News →"
+  },
+  "chart": {
+    "loading": "Wird geladen…",
+    "empty": "Noch keine Daten für diese Auswahl — schau nach dem ersten täglichen Durchlauf wieder vorbei."
+  },
+  "account": {
+    "eyebrow": "Abonnentenbereich",
+    "title": "Mein Konto",
+    "subtitle": "Finde die heutigen Tesla-News und verwalte dein Abo.",
+    "emailLabel": "E-Mail",
+    "viewNews": "Meine News ansehen",
+    "manageSubscription": "Abo verwalten",
+    "errorSubRequired": "Abo erforderlich, um auf die News zuzugreifen.",
+    "errorGeneric": "Fehler",
+    "newsSection": "Heute",
+    "newsTitle": "Tesla-News"
+  }
+}

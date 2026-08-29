@@ -1,0 +1,59 @@
+{
+  "nav": {
+    "account": "Mon compte"
+  },
+  "home": {
+    "eyebrow": "Suivi quotidien · tous marchés",
+    "title1": "Achetez votre Tesla",
+    "title2": "au bon prix, jamais au hasard.",
+    "subtitle": "Tesla ajuste ses tarifs sans prévenir. On relève le prix de chaque modèle plusieurs fois par jour et on te prévient dès qu'il touche un plancher historique.",
+    "statModels": "modèles suivis",
+    "statCountries": "pays couverts",
+    "statPrice": "par mois",
+    "dashLabel": "Radar prix",
+    "dashReading": "modèle{plural} au plus bas sur {total} suivis",
+    "dashLive": "en direct",
+    "dashUpdate": "maj plusieurs fois / jour",
+    "freeSection": "En accès libre",
+    "freeTitle": "Les dernières actus Tesla",
+    "freeCtaLine1": "Ce n'est qu'un aperçu.",
+    "freeCtaLine2": "Les abonnés reçoivent le fil complet chaque jour, en plus des alertes de prix plancher.",
+    "actionSection": "Abonnement & alertes",
+    "actionTitle": "Passe à l'action",
+    "pricePerMonth": "/ mois, résiliable à tout moment",
+    "featureAlerts": "Alertes de prix plancher",
+    "featureAlertsValue": "illimitées",
+    "featureCoverage": "Modèles & pays suivis",
+    "featureCoverageValue": "tous",
+    "featureNews": "Actus Tesla",
+    "featureNewsValue": "quotidiennes, fil complet",
+    "emailLabel": "Email",
+    "startSubscription": "Démarrer mon abonnement",
+    "orJustAlert": "Ou juste une alerte",
+    "countryLabel": "Pays",
+    "modelLabel": "Modèle",
+    "activateAlert": "Activer l'alerte",
+    "historySection": "Historique",
+    "checkoutRedirect": "Redirection vers le paiement…",
+    "checkoutError": "Erreur, réessaie plus tard.",
+    "alertSending": "Envoi…",
+    "alertSuccess": "Alerte activée. Tu seras prévenu au prochain plus bas.",
+    "footerLink": "Déjà abonné ? Accéder à mon compte et aux actus →"
+  },
+  "chart": {
+    "loading": "Chargement…",
+    "empty": "Pas encore de relevé pour cette sélection — revient après le premier passage du suivi quotidien."
+  },
+  "account": {
+    "eyebrow": "Espace abonné",
+    "title": "Mon compte",
+    "subtitle": "Retrouve tes actus Tesla du jour et gère ton abonnement.",
+    "emailLabel": "Email",
+    "viewNews": "Voir mes actus",
+    "manageSubscription": "Gérer mon abonnement",
+    "errorSubRequired": "Abonnement requis pour accéder aux actus.",
+    "errorGeneric": "Erreur",
+    "newsSection": "Aujourd'hui",
+    "newsTitle": "Actus Tesla"
+  }
+}

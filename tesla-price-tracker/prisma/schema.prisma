@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Un relevé de prix pour un modèle/pays/config donné, à un instant T
+model PriceSnapshot {
+  id         String   @id @default(cuid())
+  country    String // ex: "FR", "DE", "US"
+  model      String // ex: "model-3", "model-y", "model-s", "model-x", "cybertruck"
+  trim       String // ex: "Propulsion", "Grande Autonomie", "Performance"
+  priceCents Int // prix en centimes pour éviter les erreurs d'arrondi
+  currency   String // ex: "EUR", "USD"
+  recordedAt DateTime @default(now())
+
+  @@index([country, model, trim, recordedAt])
+}
+
+// Un utilisateur payant. On ne stocke JAMAIS de données de carte bancaire ici :
+// seul Stripe les détient. On garde uniquement des identifiants Stripe.
+model User {
+  id                   String    @id @default(cuid())
+  email                String    @unique
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  // "trialing" | "active" | "past_due" | "canceled" | "incomplete"
+  subscriptionStatus   String    @default("incomplete")
+  createdAt            DateTime  @default(now())
+
+  alerts PriceAlert[]
+}
+
+// Abonnement d'un utilisateur à des alertes de baisse de prix
+// (distinct de l'abonnement payant Stripe : un User payant peut créer
+// plusieurs PriceAlert, une par modèle/pays suivi)
+model PriceAlert {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  country   String
+  model     String
+  trim      String? // optionnel : null = tous les trims du modèle
+  createdAt DateTime @default(now())
+
+  @@index([country, model])
+}
+
+// Historique des alertes envoyées, pour éviter les doublons
+model AlertSent {
+  id           String   @id @default(cuid())
+  priceAlertId String
+  priceCents   Int
+  sentAt       DateTime @default(now())
+}
+
+// Actu Tesla alimentée quotidiennement, réservée aux abonnés payants
+model NewsItem {
+  id          String   @id @default(cuid())
+  title       String
+  url         String   @unique
+  summary     String?
+  source      String // ex: "Tesla", "Electrek", "Teslarati"
+  publishedAt DateTime
+  fetchedAt   DateTime @default(now())
+
+  @@index([publishedAt])
+}

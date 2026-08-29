@@ -1,0 +1,59 @@
+{
+  "nav": {
+    "account": "My account"
+  },
+  "home": {
+    "eyebrow": "Daily tracking · all markets",
+    "title1": "Buy your Tesla",
+    "title2": "at the right price, never a guess.",
+    "subtitle": "Tesla changes its prices without warning. We check every model's price several times a day and alert you the moment it hits a new historical low.",
+    "statModels": "models tracked",
+    "statCountries": "countries covered",
+    "statPrice": "per month",
+    "dashLabel": "Price radar",
+    "dashReading": "model{plural} at their lowest out of {total} tracked",
+    "dashLive": "live",
+    "dashUpdate": "updated several times a day",
+    "freeSection": "Free access",
+    "freeTitle": "Latest Tesla news",
+    "freeCtaLine1": "This is just a preview.",
+    "freeCtaLine2": "Subscribers get the full feed every day, plus price-floor alerts.",
+    "actionSection": "Subscribe & alerts",
+    "actionTitle": "Take action",
+    "pricePerMonth": "/ month, cancel anytime",
+    "featureAlerts": "Price floor alerts",
+    "featureAlertsValue": "unlimited",
+    "featureCoverage": "Models & countries tracked",
+    "featureCoverageValue": "all",
+    "featureNews": "Tesla news",
+    "featureNewsValue": "daily, full feed",
+    "emailLabel": "Email",
+    "startSubscription": "Start my subscription",
+    "orJustAlert": "Or just an alert",
+    "countryLabel": "Country",
+    "modelLabel": "Model",
+    "activateAlert": "Activate alert",
+    "historySection": "History",
+    "checkoutRedirect": "Redirecting to payment…",
+    "checkoutError": "Error, please try again later.",
+    "alertSending": "Sending…",
+    "alertSuccess": "Alert activated. You'll be notified at the next low.",
+    "footerLink": "Already subscribed? Go to my account and news →"
+  },
+  "chart": {
+    "loading": "Loading…",
+    "empty": "No data yet for this selection — check back after the first daily run."
+  },
+  "account": {
+    "eyebrow": "Subscriber area",
+    "title": "My account",
+    "subtitle": "Find today's Tesla news and manage your subscription.",
+    "emailLabel": "Email",
+    "viewNews": "View my news",
+    "manageSubscription": "Manage my subscription",
+    "errorSubRequired": "Subscription required to access news.",
+    "errorGeneric": "Error",
+    "newsSection": "Today",
+    "newsTitle": "Tesla news"
+  }
+}
