@@ -140,7 +140,11 @@ export async function fetchPricesForModel(
   const targetUrl = buildTeslaApiUrl(countryCode, modelSlug);
   const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}`;
 
-  const response = await fetch(proxyUrl);
+  // Sans limite explicite, une requête qui traîne peut bloquer tout un
+  // "créneau" de la concurrence dans checkAllPrices bien au-delà de son
+  // temps normal, ce qui a fait dépasser le temps d'exécution total en
+  // production. 25s est déjà généreux pour un simple appel API relayé.
+  const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(25000) });
 
   if (!response.ok) {
     throw new Error(
