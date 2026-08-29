@@ -78,7 +78,7 @@ export interface CheckAllPricesResult {
 // (65 relevés séquentiels dépassent largement le temps limite d'une
 // fonction serverless, même à 300s — testé en production). En parallèle,
 // le temps total est divisé par ~CONCURRENCY au lieu de s'additionner.
-const CONCURRENCY = 6;
+const CONCURRENCY = 4;
 
 // Parcourt tous les pays/modèles suivis, enregistre les relevés de prix et
 // notifie les abonnés en cas de nouveau plus bas. Utilisé à la fois par le

@@ -132,6 +132,19 @@ export async function fetchPricesForModelViaBrowser(
   const page: Page = await browser.newPage();
 
   try {
+    // On ne rend jamais la page visuellement : bloquer images/polices/CSS/
+    // médias réduit nettement le temps de chargement et la mémoire utilisée
+    // (important vu qu'on fait tourner plusieurs onglets en parallèle dans
+    // une fonction serverless à mémoire limitée). Le JS reste autorisé :
+    // c'est lui qui déclenche l'appel réseau qu'on veut intercepter.
+    await page.route("**/*", (route) => {
+      const type = route.request().resourceType();
+      if (["image", "font", "stylesheet", "media"].includes(type)) {
+        return route.abort();
+      }
+      return route.continue();
+    });
+
     // On n'attend PAS le chargement complet de la page (elle continue de
     // charger pubs/analytics longtemps après) : juste la réponse réseau
     // précise qui nous intéresse, beaucoup plus rapide vu qu'on répète ça
@@ -146,7 +159,23 @@ export async function fetchPricesForModelViaBrowser(
       timeout: 20000,
     });
 
-    const response = await responsePromise;
+    let response;
+    try {
+      response = await responsePromise;
+    } catch (err) {
+      // Diagnostic : si la réponse attendue n'arrive jamais, on capture ce
+      // que le navigateur a vraiment reçu (titre/URL — probablement un défi
+      // anti-bot ou une redirection plutôt que la vraie page) pour
+      // comprendre pourquoi, sans avoir besoin d'un nouveau cycle de debug.
+      const title = await page.title().catch(() => "?");
+      const finalUrl = page.url();
+      throw new Error(
+        `Pas de réponse inventory-results reçue (page: "${title}" @ ${finalUrl}) — ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
+
     const captured = (await response.json()) as InventoryResponse;
 
     return parsePriceResponse(captured, countryCode, modelSlug);
