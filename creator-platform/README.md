@@ -55,8 +55,9 @@ npm run dev
    - `DATABASE_URL` — la chaîne de connexion Neon
    - `NEXTAUTH_SECRET` — une valeur aléatoire (`openssl rand -base64 32`)
    - `NEXTAUTH_URL` — l'URL de déploiement Vercel (ex: `https://votre-projet.vercel.app`)
-4. Avant le premier déploiement (ou en local avec `DATABASE_URL` pointant vers Neon), lancez
-   `npm run db:push && npm run db:seed` pour créer les tables et les comptes de démo.
+4. Le script `build` (`package.json`) exécute automatiquement `prisma db push` puis le seed de
+   démo avant `next build` — aucune commande manuelle à lancer, les tables et les comptes de
+   démo sont créés à chaque déploiement.
 
 Comptes de démonstration créés par le seed (mot de passe : `password1234`) :
 - `admin@demo.local` — rôle modérateur/admin, accès à `/admin/moderation`
