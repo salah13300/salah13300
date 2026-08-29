@@ -7,7 +7,7 @@ import { countrySchema } from "@/lib/validation";
 // modèles d'un coup — testé en prod, ça dépasse largement le temps
 // d'exécution disponible (même 300s) une fois les requêtes relayées via
 // ScraperAPI (contournement du blocage anti-bot Tesla, voir lib/scraper.ts).
-export const maxDuration = 120;
+export const maxDuration = 290;
 
 // Les Cron Jobs Vercel déclenchent toujours une requête GET (avec le header
 // Authorization signé automatiquement à partir de la variable d'env

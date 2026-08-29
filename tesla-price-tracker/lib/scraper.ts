@@ -145,24 +145,36 @@ export async function fetchPricesForModel(
   const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}`;
 
   let response: Response | undefined;
+  let lastError: unknown;
 
-  // 429 = trop de requêtes simultanées pour le plan ScraperAPI en cours.
-  // Sur un pic temporaire (plusieurs relevés qui démarrent au même moment),
-  // patienter puis réessayer suffit généralement — pas la peine d'échouer
-  // tout de suite.
+  // Un aller-retour relayé par ScraperAPI (IP résidentielle) prend souvent
+  // plus de 25s — un premier essai à ce délai a échoué systématiquement en
+  // prod (timeout côté client, pas une vraie erreur de ScraperAPI). On
+  // réessaie aussi bien sur un timeout/erreur réseau que sur un 429 ("trop
+  // de requêtes simultanées") : dans les deux cas, patienter et retenter
+  // suffit généralement.
   for (let attempt = 0; attempt < 3; attempt++) {
-    // Sans limite explicite, une requête qui traîne peut bloquer tout un
-    // "créneau" de la concurrence dans checkAllPrices bien au-delà de son
-    // temps normal. 25s est déjà généreux pour un simple appel API relayé.
-    response = await fetch(proxyUrl, { signal: AbortSignal.timeout(25000) });
-
-    if (response.status !== 429) break;
-    await sleep(2000 * (attempt + 1));
+    try {
+      response = await fetch(proxyUrl, { signal: AbortSignal.timeout(45000) });
+      if (response.status !== 429) break;
+    } catch (err) {
+      lastError = err;
+      response = undefined;
+    }
+    await sleep(3000 * (attempt + 1));
   }
 
-  if (!response || !response.ok) {
+  if (!response) {
     throw new Error(
-      `Échec de récupération des prix pour ${modelSlug}/${countryCode}: ${response?.status}`
+      `Échec de récupération des prix pour ${modelSlug}/${countryCode}: ${
+        lastError instanceof Error ? lastError.message : String(lastError)
+      }`
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `Échec de récupération des prix pour ${modelSlug}/${countryCode}: ${response.status}`
     );
   }
 
