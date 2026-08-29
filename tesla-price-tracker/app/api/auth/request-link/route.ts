@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { createMagicLinkToken } from "@/lib/auth";
 import { sendMagicLinkEmail } from "@/lib/notify";
 import { emailSchema } from "@/lib/validation";
+import { isRateLimited } from "@/lib/rateLimit";
 import { locales, defaultLocale } from "@/i18n/config";
 
 const requestLinkSchema = z.object({
@@ -17,6 +18,10 @@ const requestLinkSchema = z.object({
 // email. Répond toujours "ok" (même si le compte n'existe pas) pour éviter
 // qu'on puisse déduire quels emails sont enregistrés (énumération de comptes).
 export async function POST(request: Request) {
+  if (await isRateLimited(request, "auth-request-link", { limit: 5, windowSeconds: 60 })) {
+    return NextResponse.json({ error: "Trop de requêtes, réessaie plus tard." }, { status: 429 });
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = requestLinkSchema.safeParse(body);
 

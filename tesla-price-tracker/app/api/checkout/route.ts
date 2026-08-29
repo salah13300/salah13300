@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
 import { checkoutSchema } from "@/lib/validation";
+import { isRateLimited } from "@/lib/rateLimit";
 
 // POST /api/checkout
 // body: { email }
@@ -10,6 +11,10 @@ import { checkoutSchema } from "@/lib/validation";
 // Le formulaire de carte bancaire est entièrement géré par Stripe :
 // aucune donnée bancaire ne transite par ce serveur.
 export async function POST(request: Request) {
+  if (await isRateLimited(request, "checkout", { limit: 5, windowSeconds: 60 })) {
+    return NextResponse.json({ error: "Trop de requêtes, réessaie plus tard." }, { status: 429 });
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = checkoutSchema.safeParse(body);
 

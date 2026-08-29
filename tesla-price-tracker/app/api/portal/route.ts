@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
 import { getSessionEmail } from "@/lib/auth";
+import { isRateLimited } from "@/lib/rateLimit";
 
 // POST /api/portal
 // Renvoie l'URL du portail client Stripe où l'utilisateur peut lui-même
@@ -10,7 +11,11 @@ import { getSessionEmail } from "@/lib/auth";
 // L'email vient de la session (cookie), jamais d'un champ envoyé par le
 // client — sinon n'importe qui pourrait ouvrir le portail de facturation de
 // n'importe quel abonné en connaissant juste son email.
-export async function POST() {
+export async function POST(request: Request) {
+  if (await isRateLimited(request, "portal", { limit: 10, windowSeconds: 60 })) {
+    return NextResponse.json({ error: "Trop de requêtes, réessaie plus tard." }, { status: 429 });
+  }
+
   const email = getSessionEmail();
 
   if (!email) {
