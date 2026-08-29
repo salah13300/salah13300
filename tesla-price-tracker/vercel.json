@@ -1,31 +1,5 @@
 {
   "crons": [
-    { "path": "/api/prices/check?country=FR&models=model-3,model-y,model-s", "schedule": "0 5 * * *" },
-    { "path": "/api/prices/check?country=FR&models=model-x,cybertruck", "schedule": "5 5 * * *" },
-    { "path": "/api/prices/check?country=DE&models=model-3,model-y,model-s", "schedule": "10 5 * * *" },
-    { "path": "/api/prices/check?country=DE&models=model-x,cybertruck", "schedule": "15 5 * * *" },
-    { "path": "/api/prices/check?country=BE&models=model-3,model-y,model-s", "schedule": "20 5 * * *" },
-    { "path": "/api/prices/check?country=BE&models=model-x,cybertruck", "schedule": "25 5 * * *" },
-    { "path": "/api/prices/check?country=NL&models=model-3,model-y,model-s", "schedule": "30 5 * * *" },
-    { "path": "/api/prices/check?country=NL&models=model-x,cybertruck", "schedule": "35 5 * * *" },
-    { "path": "/api/prices/check?country=ES&models=model-3,model-y,model-s", "schedule": "40 5 * * *" },
-    { "path": "/api/prices/check?country=ES&models=model-x,cybertruck", "schedule": "45 5 * * *" },
-    { "path": "/api/prices/check?country=IT&models=model-3,model-y,model-s", "schedule": "50 5 * * *" },
-    { "path": "/api/prices/check?country=IT&models=model-x,cybertruck", "schedule": "55 5 * * *" },
-    { "path": "/api/prices/check?country=AT&models=model-3,model-y,model-s", "schedule": "0 6 * * *" },
-    { "path": "/api/prices/check?country=AT&models=model-x,cybertruck", "schedule": "5 6 * * *" },
-    { "path": "/api/prices/check?country=PT&models=model-3,model-y,model-s", "schedule": "10 6 * * *" },
-    { "path": "/api/prices/check?country=PT&models=model-x,cybertruck", "schedule": "15 6 * * *" },
-    { "path": "/api/prices/check?country=IE&models=model-3,model-y,model-s", "schedule": "20 6 * * *" },
-    { "path": "/api/prices/check?country=IE&models=model-x,cybertruck", "schedule": "25 6 * * *" },
-    { "path": "/api/prices/check?country=DK&models=model-3,model-y,model-s", "schedule": "30 6 * * *" },
-    { "path": "/api/prices/check?country=DK&models=model-x,cybertruck", "schedule": "35 6 * * *" },
-    { "path": "/api/prices/check?country=SE&models=model-3,model-y,model-s", "schedule": "40 6 * * *" },
-    { "path": "/api/prices/check?country=SE&models=model-x,cybertruck", "schedule": "45 6 * * *" },
-    { "path": "/api/prices/check?country=PL&models=model-3,model-y,model-s", "schedule": "50 6 * * *" },
-    { "path": "/api/prices/check?country=PL&models=model-x,cybertruck", "schedule": "55 6 * * *" },
-    { "path": "/api/prices/check?country=GB&models=model-3,model-y,model-s", "schedule": "0 7 * * *" },
-    { "path": "/api/prices/check?country=GB&models=model-x,cybertruck", "schedule": "5 7 * * *" },
     { "path": "/api/news/fetch", "schedule": "15 7 * * *" }
   ]
 }

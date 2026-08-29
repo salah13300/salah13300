@@ -1,0 +1,36 @@
+name: Relevé des prix Tesla
+
+# Remplace le cron Vercel pour /api/prices/check : les fonctions serverless
+# Vercel sont limitées à 300s d'exécution, insuffisant pour relever les 13
+# pays x 5 modèles de façon fiable vu la latence variable de ScraperAPI/Tesla
+# (voir tesla-price-tracker/lib/priceCheck.ts). Un job GitHub Actions n'a pas
+# cette limite (jusqu'à 6h), donc on utilise directement le script
+# scripts/check-prices.ts (checkAllPrices), prévu pour ça.
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  check-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: tesla-price-tracker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: tesla-price-tracker/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run check-prices
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}

@@ -2,16 +2,18 @@ import { NextResponse } from "next/server";
 import { checkAllPrices, checkPricesForCountry, checkPricesForCountryModels } from "@/lib/priceCheck";
 import { countrySchema, modelsListSchema } from "@/lib/validation";
 
-// Cette route est appelée par le cron (voir vercel.json) : un cron par pays,
-// staggerés dans le temps, plutôt qu'un seul cron qui ferait les 13 pays x 5
-// modèles d'un coup — testé en prod, ça dépasse largement le temps
-// d'exécution disponible (même 300s) une fois les requêtes relayées via
-// ScraperAPI (contournement du blocage anti-bot Tesla, voir lib/scraper.ts).
+// Le relevé quotidien automatique passe maintenant par le workflow GitHub
+// Actions .github/workflows/check-prices.yml (script scripts/check-prices.ts,
+// sans limite de temps) plutôt que par un cron Vercel : testé en prod le
+// 29/08/2026, les fonctions serverless Vercel (limitées à 300s même avec un
+// pays/quelques modèles à la fois) échouaient encore par timeout de façon
+// intermittente à cause de la latence variable de ScraperAPI/Tesla (voir
+// lib/scraper.ts). Cette route reste utile pour un déclenchement manuel/debug
+// (curl ou fetch() avec le header Authorization ci-dessous).
 export const maxDuration = 290;
 
-// Les Cron Jobs Vercel déclenchent toujours une requête GET (avec le header
-// Authorization signé automatiquement à partir de la variable d'env
-// CRON_SECRET) — jamais POST, même si le vercel.json ne le précise pas.
+// Toujours en GET : c'était historiquement le cron Vercel qui appelait cette
+// route (toujours en GET, jamais POST), conservé pour un appel manuel simple.
 export async function GET(request: Request) {
   // Sécurité minimale : vérifier un secret partagé pour éviter les appels non autorisés
   const authHeader = request.headers.get("authorization");
@@ -29,9 +31,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Paramètre 'country' invalide" }, { status: 400 });
     }
 
-    // 'models' optionnel : ne vérifie qu'un sous-ensemble des 5 modèles du
-    // pays (voir vercel.json, un pays est réparti sur 2 crons pour rester
-    // dans le budget de temps — voir lib/priceCheck.ts).
+    // 'models' optionnel : ne vérifie qu'un sous-ensemble des modèles du
+    // pays — pratique pour un test manuel ciblé sans attendre les 5 modèles.
     if (modelsParam) {
       const parsedModels = modelsListSchema.safeParse(modelsParam);
       if (!parsedModels.success) {
