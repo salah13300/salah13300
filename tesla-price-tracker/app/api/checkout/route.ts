@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
+import { checkoutSchema } from "@/lib/validation";
 
 // POST /api/checkout
 // body: { email }
@@ -9,11 +10,14 @@ import { prisma } from "@/lib/db";
 // Le formulaire de carte bancaire est entièrement géré par Stripe :
 // aucune donnée bancaire ne transite par ce serveur.
 export async function POST(request: Request) {
-  const { email } = await request.json();
+  const body = await request.json().catch(() => null);
+  const parsed = checkoutSchema.safeParse(body);
 
-  if (!email || typeof email !== "string") {
-    return NextResponse.json({ error: "email requis" }, { status: 400 });
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Email invalide" }, { status: 400 });
   }
+
+  const { email } = parsed.data;
 
   const user = await prisma.user.upsert({
     where: { email },

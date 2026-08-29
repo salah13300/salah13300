@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionEmail } from "@/lib/auth";
 
-// GET /api/news?email=xxx
-// Réservé aux comptes avec abonnement Stripe actif.
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const email = searchParams.get("email");
+// GET /api/news
+// Réservé aux comptes connectés (cookie de session) avec un abonnement
+// Stripe actif. L'email vient de la session, jamais d'un paramètre envoyé
+// par le client — sinon n'importe qui pourrait lire les actus de n'importe
+// quel abonné en devinant/connaissant son email.
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  const email = getSessionEmail();
 
   if (!email) {
-    return NextResponse.json({ error: "email requis" }, { status: 400 });
+    return NextResponse.json({ error: "Connexion requise" }, { status: 401 });
   }
 
   const user = await prisma.user.findUnique({ where: { email } });

@@ -1,14 +1,21 @@
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
+import { getSessionEmail } from "@/lib/auth";
 
 // POST /api/portal
-// body: { email }
 // Renvoie l'URL du portail client Stripe où l'utilisateur peut lui-même
 // mettre à jour sa carte, changer/résilier son abonnement, voir ses factures.
 // On ne code AUCUNE de ces actions nous-mêmes : Stripe s'en charge.
-export async function POST(request: Request) {
-  const { email } = await request.json();
+// L'email vient de la session (cookie), jamais d'un champ envoyé par le
+// client — sinon n'importe qui pourrait ouvrir le portail de facturation de
+// n'importe quel abonné en connaissant juste son email.
+export async function POST() {
+  const email = getSessionEmail();
+
+  if (!email) {
+    return NextResponse.json({ error: "Connexion requise" }, { status: 401 });
+  }
 
   const user = await prisma.user.findUnique({ where: { email } });
 

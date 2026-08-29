@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { MODELS } from "@/lib/countries";
+import { countrySchema } from "@/lib/validation";
 
 // GET /api/prices/latest?country=FR
 // Renvoie, pour chaque modèle, le dernier prix enregistré (ou null si aucun
 // relevé n'existe encore) — alimente la bande "ledger" de la page d'accueil.
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const country = searchParams.get("country") ?? "FR";
+  const parsedCountry = countrySchema.safeParse(searchParams.get("country") ?? "FR");
+
+  if (!parsedCountry.success) {
+    return NextResponse.json({ error: "Paramètre 'country' invalide" }, { status: 400 });
+  }
+
+  const country = parsedCountry.data;
 
   const results = await Promise.all(
     MODELS.map(async (model) => {

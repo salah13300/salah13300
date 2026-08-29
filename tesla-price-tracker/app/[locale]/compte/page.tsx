@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
+import { useTranslations, useLocale } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import { SiteHeader } from "../components/SiteHeader";
 
 interface NewsItem {
@@ -13,37 +14,82 @@ interface NewsItem {
   publishedAt: string;
 }
 
+type AuthState = "checking" | "logged-out" | "link-sent" | "logged-in";
+
 export default function AccountPage() {
   const t = useTranslations("account");
+  const locale = useLocale();
+  const searchParams = useSearchParams();
+
+  const [authState, setAuthState] = useState<AuthState>("checking");
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [news, setNews] = useState<NewsItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function loadNews(e: React.FormEvent) {
+  // Au chargement : vérifie si une session valide existe déjà (cookie).
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.authenticated) {
+          setSessionEmail(json.email);
+          setAuthState("logged-in");
+        } else {
+          setAuthState("logged-out");
+          if (searchParams.get("authError")) {
+            setError(t("linkExpired"));
+          }
+        }
+      })
+      .catch(() => setAuthState("logged-out"));
+  }, [searchParams, t]);
+
+  // Une fois connecté, charge automatiquement les actus du jour.
+  useEffect(() => {
+    if (authState !== "logged-in") return;
+
+    fetch("/api/news")
+      .then((res) => {
+        if (!res.ok) throw new Error(res.status === 402 ? "sub" : "generic");
+        return res.json();
+      })
+      .then((json) => setNews(json.news))
+      .catch((err) => {
+        setError(err.message === "sub" ? t("errorSubRequired") : t("errorGeneric"));
+      });
+  }, [authState, t]);
+
+  async function requestLink(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setNews(null);
 
-    const res = await fetch(`/api/news?email=${encodeURIComponent(email)}`);
-    const json = await res.json();
+    const res = await fetch("/api/auth/request-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, locale }),
+    });
 
-    if (!res.ok) {
-      setError(res.status === 402 ? t("errorSubRequired") : json.error ?? t("errorGeneric"));
-      return;
+    if (res.ok) {
+      setAuthState("link-sent");
+    } else {
+      setError(t("errorGeneric"));
     }
-
-    setNews(json.news);
   }
 
   async function openBillingPortal() {
-    const res = await fetch("/api/portal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
+    setError(null);
+    const res = await fetch("/api/portal", { method: "POST" });
     const json = await res.json();
     if (json.url) window.location.href = json.url;
     else setError(json.error ?? t("errorGeneric"));
+  }
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setSessionEmail(null);
+    setNews(null);
+    setAuthState("logged-out");
   }
 
   return (
@@ -55,30 +101,46 @@ export default function AccountPage() {
         <p className="hero-sub">{t("subtitle")}</p>
 
         <div className="card">
-          <form onSubmit={loadNews}>
-            <div className="field">
-              <label htmlFor="account-email">{t("emailLabel")}</label>
-              <input
-                id="account-email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="toi@example.com"
-              />
-            </div>
-            <button type="submit" className="btn btn-primary" style={{ marginBottom: 12 }}>
-              {t("viewNews")}
-            </button>
-            <button
-              type="button"
-              onClick={openBillingPortal}
-              disabled={!email}
-              className="btn btn-secondary"
-            >
-              {t("manageSubscription")}
-            </button>
-          </form>
+          {authState === "checking" && <p className="status-msg">{t("loading")}</p>}
+
+          {authState === "logged-out" && (
+            <form onSubmit={requestLink}>
+              <div className="field">
+                <label htmlFor="account-email">{t("emailLabel")}</label>
+                <input
+                  id="account-email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="toi@example.com"
+                />
+              </div>
+              <button type="submit" className="btn btn-primary">
+                {t("requestLink")}
+              </button>
+            </form>
+          )}
+
+          {authState === "link-sent" && <p className="status-msg">{t("linkSent")}</p>}
+
+          {authState === "logged-in" && (
+            <>
+              <p className="status-msg">{t("loggedInAs", { email: sessionEmail ?? "" })}</p>
+              <button
+                type="button"
+                onClick={openBillingPortal}
+                className="btn btn-secondary"
+                style={{ marginTop: 12, marginBottom: 12 }}
+              >
+                {t("manageSubscription")}
+              </button>
+              <button type="button" onClick={logout} className="btn btn-secondary">
+                {t("logout")}
+              </button>
+            </>
+          )}
+
           {error && <p className="status-msg is-error">{error}</p>}
         </div>
 

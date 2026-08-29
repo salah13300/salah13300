@@ -1,19 +1,22 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { subscribeSchema } from "@/lib/validation";
 
 // POST /api/subscribe
 // body: { email, country, model, trim? }
 // Crée une alerte de prix — réservé aux comptes avec un abonnement Stripe actif.
 export async function POST(request: Request) {
-  const body = await request.json();
-  const { email, country, model, trim } = body;
+  const body = await request.json().catch(() => null);
+  const parsed = subscribeSchema.safeParse(body);
 
-  if (!email || !country || !model) {
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: "email, country et model sont requis" },
+      { error: "email, country et model sont requis et doivent être valides" },
       { status: 400 }
     );
   }
+
+  const { email, country, model, trim } = parsed.data;
 
   const user = await prisma.user.findUnique({ where: { email } });
 
