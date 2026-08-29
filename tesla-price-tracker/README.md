@@ -43,8 +43,14 @@ npm run dev
 3. Déployer sur Vercel :
    - Ce repo contient plusieurs projets — dans les réglages du projet
      Vercel, mettre **Root Directory** sur `tesla-price-tracker`
-   - **Build Command** (override) : `npx prisma migrate deploy && next build`
-     — applique automatiquement le schéma Prisma à chaque déploiement
+   - **Framework Preset** : `Next.js` (sinon Vercel cherche un dossier
+     `public` et échoue)
+   - **Build Command** (override) : `npx prisma db push && next build`
+     — synchronise le schéma Prisma avec la base à chaque déploiement.
+     Aucune migration versionnée n'existe encore dans ce projet ; `db push`
+     est adapté pour démarrer. À remplacer par de vraies migrations
+     (`prisma migrate dev` en local, puis `migrate deploy` ici) avant que
+     la base ne contienne des données réelles à préserver.
    - Renseigner toutes les variables de `.env.example` dans les
      "Environment Variables" du projet
 4. Configurer un Cron Vercel (`vercel.json`) qui appelle
