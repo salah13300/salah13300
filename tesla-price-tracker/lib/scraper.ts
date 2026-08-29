@@ -153,7 +153,17 @@ export async function fetchPricesForModel(
   // réessaie aussi bien sur un timeout/erreur réseau que sur un 429 ("trop
   // de requêtes simultanées") : dans les deux cas, patienter et retenter
   // suffit généralement.
-  for (let attempt = 0; attempt < 3; attempt++) {
+  //
+  // Limité à 2 tentatives (pas 3) : avec 5 modèles à vérifier par pays dans
+  // une seule invocation (voir priceCheck.ts), le budget de temps total doit
+  // rester sous maxDuration (290s) même si plusieurs modèles échouent à
+  // chaque essai. Vérifié en prod le 29/08/2026 : à 3 tentatives, certains
+  // modèles échouaient encore par timeout alors que ScraperAPI répondait
+  // correctement (pas de 403/bloqué), simplement parce que le budget total
+  // (jusqu'à 3 × 45s + délais, par modèle) dépassait la limite une fois
+  // cumulé sur plusieurs modèles.
+  const MAX_ATTEMPTS = 2;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
       response = await fetch(proxyUrl, { signal: AbortSignal.timeout(45000) });
       if (response.status !== 429) break;
@@ -161,7 +171,9 @@ export async function fetchPricesForModel(
       lastError = err;
       response = undefined;
     }
-    await sleep(3000 * (attempt + 1));
+    if (attempt < MAX_ATTEMPTS - 1) {
+      await sleep(3000 * (attempt + 1));
+    }
   }
 
   if (!response) {

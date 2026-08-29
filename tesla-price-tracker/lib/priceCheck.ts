@@ -73,9 +73,15 @@ export interface CheckPricesResult {
 
 // Nombre de relevés menés en parallèle. Un plan d'entrée/essai ScraperAPI
 // autorise en général peu de requêtes simultanées — 10 a déclenché des 429
-// ("trop de requêtes") en production. À ajuster à la hausse si ton plan le
-// permet (voir le dashboard ScraperAPI pour la limite exacte de ton plan).
-const CONCURRENCY = 3;
+// ("trop de requêtes") en production, d'où un palier à 3 initialement. Mais
+// avec 3 (< 5 modèles/pays), `checkPricesForCountry` doit traiter les tâches
+// en 2 vagues, ce qui a fait dépasser le budget de temps de la fonction
+// (maxDuration 290s) et provoqué des timeouts sur les derniers modèles
+// (vérifié en prod le 29/08/2026 : 2 modèles sur 5 en échec par timeout,
+// aucun 403/429). Remonté à 5 pour que les 5 modèles d'un pays partent en
+// une seule vague — si de nouveaux 429 apparaissent, redescendre plutôt que
+// remonter au-delà de la limite du plan ScraperAPI.
+const CONCURRENCY = 5;
 
 async function runChecks(
   tasks: { country: (typeof COUNTRIES)[number]; model: (typeof MODELS)[number] }[]
