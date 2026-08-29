@@ -1,0 +1,191 @@
+// Schéma de données — MVP Phase 1 (voir cahier des charges, section 6 pour la cible prod : PostgreSQL + Redis)
+// SQLite est utilisé ici pour permettre de lancer le projet immédiatement sans infra externe.
+// Le modèle relationnel est conçu pour migrer vers PostgreSQL sans changement de structure.
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// SQLite (dev/démo) ne supporte pas les enums Prisma natifs : les champs listés comme "enum"
+// ci-dessous sont modélisés en String, avec les valeurs autorisées documentées et gardées côté
+// application dans src/lib/enums.ts. À la migration vers PostgreSQL (prod), ces String pourront
+// redevenir de vrais enums Prisma.
+//
+// Role: FAN | CREATOR | MODERATOR | ADMIN
+// KycStatus: NOT_STARTED | PENDING | APPROVED | REJECTED
+// CreatorProfileStatus: DRAFT | PENDING_REVIEW | APPROVED | REJECTED | SUSPENDED
+// ContentVisibility: PUBLIC_TEASER | SUBSCRIBERS | PAY_PER_VIEW
+// TransactionType: WALLET_TOPUP | SUBSCRIPTION | PPV_UNLOCK | TIP | CUSTOM_REQUEST_ESCROW | CUSTOM_REQUEST_RELEASE | PAYOUT
+// TransactionStatus: PENDING | ESCROWED | COMPLETED | REFUNDED | FAILED
+// CustomRequestStatus: REQUESTED | ACCEPTED | DECLINED | COUNTER_OFFERED | DELIVERED | RELEASED | CANCELLED
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         String   @default("FAN")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Vérification de majorité obligatoire avant tout accès au contenu adulte (section 3.2 / 0)
+  ageVerified   Boolean   @default(false)
+  kycStatus     String @default("NOT_STARTED")
+  kycProvider   String? // ex: "sumsub-mock", à remplacer par le vrai prestataire (section 6/9)
+  kycReference  String?
+  twoFactorEnabled Boolean @default(false)
+
+  walletBalanceCents Int @default(0)
+
+  creatorProfile CreatorProfile?
+  subscriptions  Subscription[]  @relation("FanSubscriptions")
+  purchases      Transaction[]   @relation("BuyerTransactions")
+  sentMessages   Message[]       @relation("SentMessages")
+  conversationsAsFan Conversation[] @relation("FanConversations")
+  customRequestsAsFan CustomRequest[] @relation("FanCustomRequests")
+  reportsFiled   Report[]        @relation("ReportsFiled")
+  moderationActions ModerationLog[] @relation("ModeratorActions")
+}
+
+model CreatorProfile {
+  id          String                @id @default(cuid())
+  userId      String                @unique
+  user        User                  @relation(fields: [userId], references: [id])
+  handle      String                @unique
+  displayName String
+  bio         String                @default("")
+  avatarUrl   String?
+  status      String                @default("DRAFT")
+  subscriptionPriceCents Int        @default(999)
+  contractSignedAt DateTime?
+  rejectionReason String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  contents      Content[]
+  subscribers   Subscription[]      @relation("CreatorSubscriptions")
+  conversations Conversation[]      @relation("CreatorConversations")
+  customRequests CustomRequest[]    @relation("CreatorCustomRequests")
+  payouts       Transaction[]       @relation("CreatorTransactions")
+}
+
+model Content {
+  id           String            @id @default(cuid())
+  creatorId    String
+  creator      CreatorProfile    @relation(fields: [creatorId], references: [id])
+  title        String
+  description  String @default("")
+  mediaUrl     String // en prod : URL signée courte durée vers S3/CDN (section 4.1)
+  thumbnailUrl String?
+  visibility   String            @default("SUBSCRIBERS")
+  priceCents   Int               @default(0) // utilisé si PAY_PER_VIEW
+  watermarkRef String?           // référence du tatouage forensique (section 4.2, non implémenté en MVP)
+  createdAt    DateTime          @default(now())
+
+  unlocks ContentUnlock[]
+}
+
+model ContentUnlock {
+  id        String   @id @default(cuid())
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id])
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([contentId, userId])
+}
+
+model Subscription {
+  id         String   @id @default(cuid())
+  fanId      String
+  fan        User     @relation("FanSubscriptions", fields: [fanId], references: [id])
+  creatorId  String
+  creator    CreatorProfile @relation("CreatorSubscriptions", fields: [creatorId], references: [id])
+  active     Boolean  @default(true)
+  priceCents Int
+  startedAt  DateTime @default(now())
+  renewsAt   DateTime
+  cancelledAt DateTime?
+
+  @@unique([fanId, creatorId])
+}
+
+model Conversation {
+  id          String          @id @default(cuid())
+  fanId       String
+  fan         User            @relation("FanConversations", fields: [fanId], references: [id])
+  creatorId   String
+  creator     CreatorProfile  @relation("CreatorConversations", fields: [creatorId], references: [id])
+  createdAt   DateTime        @default(now())
+
+  messages Message[]
+
+  @@unique([fanId, creatorId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  senderId       String
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id])
+  body           String       @default("")
+  mediaUrl       String?
+  priceCents     Int          @default(0) // > 0 = PPV verrouillé jusqu'au paiement
+  unlockedBy     String       @default("[]") // JSON array d'IDs utilisateurs ayant débloqué (SQLite n'a pas de type array natif)
+  createdAt      DateTime     @default(now())
+}
+
+model CustomRequest {
+  id          String              @id @default(cuid())
+  fanId       String
+  fan         User                @relation("FanCustomRequests", fields: [fanId], references: [id])
+  creatorId   String
+  creator     CreatorProfile      @relation("CreatorCustomRequests", fields: [creatorId], references: [id])
+  description String
+  proposedPriceCents Int
+  status      String              @default("REQUESTED")
+  deliverableUrl String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+model Transaction {
+  id          String            @id @default(cuid())
+  type        String
+  status      String            @default("PENDING")
+  amountCents Int
+  buyerId     String?
+  buyer       User?             @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  creatorId   String?
+  creator     CreatorProfile?   @relation("CreatorTransactions", fields: [creatorId], references: [id])
+  metadata    String            @default("{}") // JSON libre (référence contenu, message, etc.)
+  createdAt   DateTime          @default(now())
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  reporterId  String
+  reporter    User     @relation("ReportsFiled", fields: [reporterId], references: [id])
+  targetType  String // "content" | "message" | "creatorProfile"
+  targetId    String
+  reason      String
+  status      String   @default("OPEN") // OPEN | REVIEWED | ACTIONED | DISMISSED
+  createdAt   DateTime @default(now())
+}
+
+// Journalisation immuable des actions de modération (section 4.4)
+model ModerationLog {
+  id          String   @id @default(cuid())
+  moderatorId String
+  moderator   User     @relation("ModeratorActions", fields: [moderatorId], references: [id])
+  action      String
+  targetType  String
+  targetId    String
+  reason      String   @default("")
+  createdAt   DateTime @default(now())
+}
