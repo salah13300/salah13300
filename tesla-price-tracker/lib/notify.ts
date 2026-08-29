@@ -16,7 +16,11 @@ export async function sendPriceDropAlert(params: {
   });
 
   await resend.emails.send({
-    from: "alertes@tesla-price-tracker.example.com", // à remplacer par ton domaine vérifié
+    // "onboarding@resend.dev" fonctionne sans configuration (utile pour
+    // tester), mais Resend le limite en envoi et en délivrabilité réelle.
+    // Dès qu'un domaine est vérifié dans Resend (menu Domaines), remplace
+    // par une adresse de ce domaine, ex: "alertes@ton-domaine.com".
+    from: "onboarding@resend.dev",
     to: params.to,
     subject: `Nouveau prix le plus bas : ${params.model} (${params.trim}) à ${price}`,
     html: `
