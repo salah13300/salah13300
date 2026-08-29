@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "postinstall": "prisma generate",
     "check-prices": "tsx scripts/check-prices.ts",
     "fetch-news": "tsx scripts/fetch-news.ts"
   },
