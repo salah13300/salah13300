@@ -102,6 +102,15 @@ async function runChecks(
           error: err instanceof Error ? err.message : String(err),
         });
       }
+      // Petite pause entre deux relevés d'un même worker : sans limite de
+      // temps stricte (voir GitHub Actions), on peut se permettre un trafic
+      // moins en rafale — les échecs quasi systématiques observés le
+      // 29/08/2026 après plusieurs runs de test rapprochés dans la journée
+      // suggèrent une détection anti-bot Tesla/Akamai plus agressive face à
+      // un volume de requêtes automatisées groupées.
+      if (nextIndex < tasks.length) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
     }
   }
 
