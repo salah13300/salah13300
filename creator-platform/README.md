@@ -32,19 +32,31 @@ Autres points non implémentés dans ce MVP (prévus aux phases suivantes, secti
 ## Stack
 
 - Next.js 14 (App Router, SSR) + TypeScript + Tailwind CSS
-- Prisma + SQLite en local (le schéma est écrit pour migrer vers PostgreSQL sans changement de
-  structure — changez juste `provider` et `DATABASE_URL` dans `prisma/schema.prisma`/`.env`)
+- Prisma + PostgreSQL (ex: [Neon](https://neon.tech), plan gratuit — compatible Vercel serverless)
 - NextAuth (credentials + JWT) pour l'authentification et les rôles (FAN / CREATOR / MODERATOR / ADMIN)
 
-## Démarrage
+## Démarrage (local)
 
 ```bash
 npm install
-cp .env.example .env   # déjà fait si vous clonez ce dépôt tel quel
-npm run db:push        # crée la base SQLite locale à partir du schéma Prisma
+cp .env.example .env   # renseignez DATABASE_URL avec une URL Postgres (ex: Neon)
+npm run db:push        # crée les tables à partir du schéma Prisma
 npm run db:seed        # crée des comptes de démo
 npm run dev
 ```
+
+## Déploiement sur Vercel
+
+1. Créez une base Postgres gratuite sur [neon.tech](https://neon.tech), récupérez la chaîne de
+   connexion (utilisez la version "pooled connection" pour un environnement serverless).
+2. Importez ce dépôt sur [vercel.com/new](https://vercel.com/new) (racine du projet : `creator-platform/`),
+   ou déployez via la CLI : `npx vercel --cwd creator-platform`.
+3. Dans les variables d'environnement du projet Vercel, renseignez :
+   - `DATABASE_URL` — la chaîne de connexion Neon
+   - `NEXTAUTH_SECRET` — une valeur aléatoire (`openssl rand -base64 32`)
+   - `NEXTAUTH_URL` — l'URL de déploiement Vercel (ex: `https://votre-projet.vercel.app`)
+4. Avant le premier déploiement (ou en local avec `DATABASE_URL` pointant vers Neon), lancez
+   `npm run db:push && npm run db:seed` pour créer les tables et les comptes de démo.
 
 Comptes de démonstration créés par le seed (mot de passe : `password1234`) :
 - `admin@demo.local` — rôle modérateur/admin, accès à `/admin/moderation`

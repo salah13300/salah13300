@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
-export const revalidate = 30;
+export const dynamic = "force-dynamic";
 
 export default async function CreatorsPage() {
   const creators = await prisma.creatorProfile.findMany({

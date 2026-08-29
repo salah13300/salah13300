@@ -1,9 +1,8 @@
-// Schéma de données — MVP Phase 1 (voir cahier des charges, section 6 pour la cible prod : PostgreSQL + Redis)
-// SQLite est utilisé ici pour permettre de lancer le projet immédiatement sans infra externe.
-// Le modèle relationnel est conçu pour migrer vers PostgreSQL sans changement de structure.
+// Schéma de données — MVP Phase 1 (voir cahier des charges, section 6 : PostgreSQL + Redis en cible prod)
+// PostgreSQL (Neon) — déploiement Vercel.
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -11,10 +10,9 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// SQLite (dev/démo) ne supporte pas les enums Prisma natifs : les champs listés comme "enum"
-// ci-dessous sont modélisés en String, avec les valeurs autorisées documentées et gardées côté
-// application dans src/lib/enums.ts. À la migration vers PostgreSQL (prod), ces String pourront
-// redevenir de vrais enums Prisma.
+// Ces champs sont modélisés en String plutôt qu'en enum Prisma natif (choix hérité du support
+// initial SQLite en dev local) : les valeurs autorisées sont documentées ici et gardées côté
+// application dans src/lib/enums.ts.
 //
 // Role: FAN | CREATOR | MODERATOR | ADMIN
 // KycStatus: NOT_STARTED | PENDING | APPROVED | REJECTED

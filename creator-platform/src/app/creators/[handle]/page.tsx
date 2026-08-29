@@ -7,7 +7,7 @@ import ReportButton from "@/components/ReportButton";
 import TipButton from "@/components/TipButton";
 import StartConversationButton from "@/components/StartConversationButton";
 
-export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: { handle: string } }) {
   const creator = await prisma.creatorProfile.findUnique({ where: { handle: params.handle } });
