@@ -1,12 +1,18 @@
 {
   "crons": [
-    {
-      "path": "/api/prices/check",
-      "schedule": "0 5 * * *"
-    },
-    {
-      "path": "/api/news/fetch",
-      "schedule": "0 7 * * *"
-    }
+    { "path": "/api/prices/check?country=FR", "schedule": "0 5 * * *" },
+    { "path": "/api/prices/check?country=DE", "schedule": "5 5 * * *" },
+    { "path": "/api/prices/check?country=BE", "schedule": "10 5 * * *" },
+    { "path": "/api/prices/check?country=NL", "schedule": "15 5 * * *" },
+    { "path": "/api/prices/check?country=ES", "schedule": "20 5 * * *" },
+    { "path": "/api/prices/check?country=IT", "schedule": "25 5 * * *" },
+    { "path": "/api/prices/check?country=AT", "schedule": "30 5 * * *" },
+    { "path": "/api/prices/check?country=PT", "schedule": "35 5 * * *" },
+    { "path": "/api/prices/check?country=IE", "schedule": "40 5 * * *" },
+    { "path": "/api/prices/check?country=DK", "schedule": "45 5 * * *" },
+    { "path": "/api/prices/check?country=SE", "schedule": "50 5 * * *" },
+    { "path": "/api/prices/check?country=PL", "schedule": "55 5 * * *" },
+    { "path": "/api/prices/check?country=GB", "schedule": "0 6 * * *" },
+    { "path": "/api/news/fetch", "schedule": "0 7 * * *" }
   ]
 }

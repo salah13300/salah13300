@@ -66,7 +66,7 @@ async function checkPricesForModelAndCountry(
   }
 }
 
-export interface CheckAllPricesResult {
+export interface CheckPricesResult {
   checked: number;
   failed: { country: string; model: string; error: string }[];
 }
@@ -77,18 +77,11 @@ export interface CheckAllPricesResult {
 // permet (voir le dashboard ScraperAPI pour la limite exacte de ton plan).
 const CONCURRENCY = 3;
 
-// Parcourt tous les pays/modèles suivis, enregistre les relevés de prix et
-// notifie les abonnés en cas de nouveau plus bas. Utilisé à la fois par le
-// script `check-prices` (exécution manuelle/CI) et par la route
-// `/api/prices/check` (cron Vercel, une fois par jour — voir vercel.json).
-export async function checkAllPrices(): Promise<CheckAllPricesResult> {
-  const failed: CheckAllPricesResult["failed"] = [];
+async function runChecks(
+  tasks: { country: (typeof COUNTRIES)[number]; model: (typeof MODELS)[number] }[]
+): Promise<CheckPricesResult> {
+  const failed: CheckPricesResult["failed"] = [];
   let checked = 0;
-
-  const tasks = COUNTRIES.flatMap((country) =>
-    MODELS.map((model) => ({ country, model }))
-  );
-
   let nextIndex = 0;
 
   async function worker() {
@@ -111,4 +104,26 @@ export async function checkAllPrices(): Promise<CheckAllPricesResult> {
   await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
 
   return { checked, failed };
+}
+
+// Parcourt tous les pays/modèles suivis (13 x 5 = 65 relevés). Utilisé par
+// le script `check-prices` (exécution manuelle/CI, pas de limite de temps).
+// Trop lent pour une seule invocation serverless (testé en prod : dépasse
+// même 300s) — la route cron utilise `checkPricesForCountry` à la place,
+// un pays à la fois (voir vercel.json, un cron par pays).
+export async function checkAllPrices(): Promise<CheckPricesResult> {
+  const tasks = COUNTRIES.flatMap((country) => MODELS.map((model) => ({ country, model })));
+  return runChecks(tasks);
+}
+
+// Ne vérifie qu'un seul pays (5 modèles) — taille de lot adaptée à une
+// fonction serverless avec un temps d'exécution limité.
+export async function checkPricesForCountry(countryCode: string): Promise<CheckPricesResult> {
+  const country = COUNTRIES.find((c) => c.code === countryCode);
+  if (!country) {
+    throw new Error(`Pays inconnu: ${countryCode}`);
+  }
+
+  const tasks = MODELS.map((model) => ({ country, model }));
+  return runChecks(tasks);
 }
