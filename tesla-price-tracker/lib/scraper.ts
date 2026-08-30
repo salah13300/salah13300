@@ -19,8 +19,14 @@
  * qui dispose d'un grand pool d'IP résidentielles — la requête arrive chez
  * Tesla comme si elle venait d'un vrai visiteur, pas d'un centre de
  * données. Comme on cible directement l'API JSON de Tesla (pas une page
- * HTML à rendre), pas besoin du rendu JS de ScraperAPI (plus cher) : un
- * simple passthrough suffit.
+ * HTML à rendre), pas besoin du rendu JS de ScraperAPI (plus cher).
+ *
+ * En revanche, le paramètre `premium=true` EST nécessaire (contrairement à
+ * ce qu'on pensait initialement) : tesla.com est un "domaine protégé" côté
+ * ScraperAPI (Akamai) — sans ce paramètre, ScraperAPI utilise son pool de
+ * proxies standard, insuffisant, et renvoie un 500 explicite le demandant.
+ * Repéré en prod le 29/08/2026 après une journée d'échecs quasi
+ * systématiques à tort attribués à la concurrence/au volume de requêtes.
  */
 
 import { COUNTRIES, MODELS } from "./countries";
@@ -142,7 +148,14 @@ export async function fetchPricesForModel(
   }
 
   const targetUrl = buildTeslaApiUrl(countryCode, modelSlug);
-  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}`;
+  // premium=true : requis par ScraperAPI pour les "domaines protégés" —
+  // message d'erreur explicite obtenu en prod le 29/08/2026 ("Protected
+  // domains may require adding premium=true OR ultra_premium=true
+  // parameter to your request") sur tesla.com (protégé par Akamai). Sans ce
+  // paramètre, ScraperAPI utilise son pool de proxies standard, insuffisant
+  // ici — d'où les échecs quasi systématiques observés toute la journée
+  // (pas un problème de concurrence, de timeout ou de volume de requêtes).
+  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&premium=true&url=${encodeURIComponent(targetUrl)}`;
 
   let response: Response | undefined;
   let lastError: unknown;
