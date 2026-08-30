@@ -94,7 +94,7 @@ function parsePriceResponse(
 
 const INVENTORY_API_URL = "https://www.tesla.com/inventory/api/v4/inventory-results";
 
-function buildTeslaApiUrl(countryCode: string, modelSlug: string): string {
+export function buildTeslaApiUrl(countryCode: string, modelSlug: string): string {
   const country = COUNTRIES.find((c) => c.code === countryCode);
   const model = MODELS.find((m) => m.slug === modelSlug);
 
@@ -209,4 +209,26 @@ export async function fetchPricesForModel(
 
   const raw: InventoryResponse = await response.json();
   return parsePriceResponse(raw, countryCode, modelSlug);
+}
+
+// Debug uniquement : mêmes appels réseau que fetchPricesForModel, mais
+// renvoie la réponse Tesla brute (avant extraction des prix) — pour
+// diagnostiquer un cas où la requête réussit mais total_matches_found/
+// results.exact sont vides. À supprimer une fois le diagnostic terminé.
+export async function fetchRawInventoryForDebug(
+  countryCode: string,
+  modelSlug: string
+): Promise<{ targetUrl: string; status: number; raw: unknown }> {
+  const apiKey = process.env.SCRAPERAPI_KEY;
+  if (!apiKey) {
+    throw new Error("SCRAPERAPI_KEY manquant dans les variables d'environnement");
+  }
+
+  const targetUrl = buildTeslaApiUrl(countryCode, modelSlug);
+  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&ultra_premium=true&url=${encodeURIComponent(targetUrl)}`;
+
+  const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(75000) });
+  const raw = await response.json().catch(async () => await response.text());
+
+  return { targetUrl, status: response.status, raw };
 }

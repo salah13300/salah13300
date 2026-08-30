@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchPricesForModel } from "@/lib/scraper";
+import { fetchRawInventoryForDebug } from "@/lib/scraper";
 import { countrySchema, modelSchema } from "@/lib/validation";
 
 // Route de diagnostic temporaire (à supprimer une fois le problème résolu) :
@@ -24,13 +24,16 @@ export async function GET(request: Request) {
   }
 
   try {
-    const prices = await fetchPricesForModel(parsedCountry.data, parsedModel.data);
+    const { targetUrl, status, raw } = await fetchRawInventoryForDebug(
+      parsedCountry.data,
+      parsedModel.data
+    );
     return NextResponse.json({
-      status: "ok",
       country: parsedCountry.data,
       model: parsedModel.data,
-      resultCount: prices.length,
-      prices,
+      scraperApiStatus: status,
+      targetUrl,
+      raw,
     });
   } catch (err) {
     return NextResponse.json(
