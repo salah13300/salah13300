@@ -36,11 +36,21 @@ export async function GET(request: Request) {
     const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(85000) });
     const html = await response.text();
 
-    // Motifs plausibles pour un prix affiché en euros (espaces normaux et
-    // insécables), ex. "36 733 €" ou "36733€".
-    const priceMatches = [
-      ...html.matchAll(/[\d][\d\s .,]{2,12}\s?€/g),
+    // Clés JSON structurées probables (plus fiable qu'un texte de mentions
+    // légales) : vehiclePrice, purchasePrice, basePrice, grossPrice.
+    const jsonFieldMatches = [
+      ...html.matchAll(/"(vehiclePrice|purchasePrice|basePrice|grossPrice|totalPrice)"\s*:\s*[^,}]{1,40}/gi),
     ].map((m) => m[0]);
+
+    // Motifs plausibles pour un prix affiché en euros — Tesla utilise
+    // &nbsp; (pas un espace normal) entre les chiffres et avant le symbole
+    // monétaire, ex. "36 601&nbsp;€".
+    const euroSign = String.fromCharCode(0x20ac);
+    const priceRegex = new RegExp(
+      "[0-9][0-9\\s.,]{2,12}(&nbsp;)?\\s?" + euroSign,
+      "g"
+    );
+    const priceMatches = [...html.matchAll(priceRegex)].map((m) => m[0]);
 
     // Contexte textuel autour de "Prix d'achat" / "purchase" pour situer où
     // le prix apparaît dans la structure de la page.
@@ -52,6 +62,7 @@ export async function GET(request: Request) {
       targetUrl,
       scraperApiStatus: response.status,
       htmlLength: html.length,
+      jsonFieldMatchesSample: [...new Set(jsonFieldMatches)].slice(0, 20),
       priceMatchesSample: [...new Set(priceMatches)].slice(0, 30),
       contextMatchesSample: contextMatches.slice(0, 10),
     });
