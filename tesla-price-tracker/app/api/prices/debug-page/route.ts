@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&ultra_premium=true&render=true&url=${encodeURIComponent(targetUrl)}`;
 
   try {
-    const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(85000) });
+    const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(85000), cache: "no-store" });
     const html = await response.text();
 
     // Clés JSON structurées probables (plus fiable qu'un texte de mentions

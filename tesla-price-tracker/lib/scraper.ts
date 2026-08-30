@@ -154,10 +154,18 @@ async function fetchRenderedHtml(targetUrl: string): Promise<string> {
   // On réessaie sur timeout/erreur réseau, 429 (trop de requêtes
   // simultanées) et tout 5xx (erreur transitoire côté ScraperAPI ou de la
   // cible relayée).
+  //
+  // cache: "no-store" indispensable : Next.js met en cache les appels
+  // fetch() par défaut (même à l'intérieur d'une route dynamique) — repéré
+  // le 30/08/2026 en observant une "2e tentative" répondre en 442ms au lieu
+  // des dizaines de secondes habituelles, avec exactement la même réponse
+  // (tronquée) que la première. Sans ce paramètre, les tentatives de retry
+  // pouvaient renvoyer une page ratée mise en cache au lieu de retenter
+  // réellement le réseau.
   const MAX_ATTEMPTS = 3;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
-      response = await fetch(proxyUrl, { signal: AbortSignal.timeout(85000) });
+      response = await fetch(proxyUrl, { signal: AbortSignal.timeout(85000), cache: "no-store" });
       if (response.status !== 429 && response.status < 500) break;
     } catch (err) {
       lastError = err;
