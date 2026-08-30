@@ -65,6 +65,9 @@ export async function GET(request: Request) {
       jsonFieldMatchesSample: [...new Set(jsonFieldMatches)].slice(0, 20),
       priceMatchesSample: [...new Set(priceMatches)].slice(0, 30),
       contextMatchesSample: contextMatches.slice(0, 10),
+      // Extrait brut utile quand la page est anormalement courte (redirection,
+      // page d'erreur, modèle indisponible sur ce marché...).
+      htmlSnippet: html.slice(0, 3000),
     });
   } catch (err) {
     return NextResponse.json(
