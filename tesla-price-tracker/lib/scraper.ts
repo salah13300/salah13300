@@ -21,17 +21,13 @@
  * données. Comme on cible directement l'API JSON de Tesla (pas une page
  * HTML à rendre), pas besoin du rendu JS de ScraperAPI (plus cher).
  *
- * IMPORTANT — limite connue (29/08/2026) : tesla.com est un domaine
- * "protégé" côté ScraperAPI (Akamai), qui recommande `premium=true` ou
- * `ultra_premium=true` pour ces domaines. Les deux ont été testés en prod
- * et renvoient un 403 explicite : "Your current plan does not allow you to
- * use our premium proxies. Please upgrade your plan...". Le plan
- * ScraperAPI actuel (essai) n'inclut donc pas ces pools — on reste sur le
- * pool standard par défaut, ce qui explique la fiabilité limitée et
- * variable observée (parfois quelques modèles passent, d'autres fois
- * aucun). Une mise à niveau du plan ScraperAPI vers une offre incluant les
- * pools premium/ultra premium est probablement nécessaire pour une
- * fiabilité correcte sur ce domaine précis.
+ * IMPORTANT (29/08/2026) : tesla.com est un domaine "protégé" côté
+ * ScraperAPI (Akamai), qui nécessite `premium=true` (ou `ultra_premium=true`
+ * pour les cas les plus difficiles). Sur le plan gratuit d'essai, ces
+ * paramètres étaient refusés (403 "Your current plan does not allow you to
+ * use our premium proxies") — ce qui expliquait la fiabilité limitée et
+ * variable observée avec le pool standard. Débloqué par le passage au plan
+ * payant Hobby.
  */
 
 import { COUNTRIES, MODELS } from "./countries";
@@ -153,15 +149,12 @@ export async function fetchPricesForModel(
   }
 
   const targetUrl = buildTeslaApiUrl(countryCode, modelSlug);
-  // Ni premium=true ni ultra_premium=true : les deux ont été testés en prod
-  // le 29/08/2026 et renvoient un 403 explicite ("Your current plan does
-  // not allow you to use our premium proxies. Please upgrade your plan...")
-  // — le plan ScraperAPI actuel n'inclut pas ces pools, ajouter le
-  // paramètre ne fait qu'échouer plus vite. Tesla exigeant ces pools
-  // (domaine protégé Akamai), le pool standard reste la seule option tant
-  // que le plan n'est pas mis à niveau — d'où la fiabilité limitée
-  // observée. Voir le commit correspondant pour le detail du diagnostic.
-  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}`;
+  // premium=true : nécessaire pour tesla.com, domaine "protégé" côté
+  // ScraperAPI (Akamai) — voir le docstring en haut du fichier. Refusé par
+  // le plan gratuit (403 "upgrade your plan"), débloqué le 29/08/2026 par
+  // le passage au plan payant Hobby (10 crédits/requête réussie, contre 30
+  // pour ultra_premium=true — à essayer seulement si premium ne suffit pas).
+  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&premium=true&url=${encodeURIComponent(targetUrl)}`;
 
   let response: Response | undefined;
   let lastError: unknown;
