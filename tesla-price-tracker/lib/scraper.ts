@@ -148,12 +148,13 @@ export async function fetchPricesForModel(
   let lastError: unknown;
 
   // Un aller-retour relayé par ScraperAPI (IP résidentielle) prend souvent
-  // plus de 25s — un premier essai à ce délai a échoué systématiquement en
-  // prod (timeout côté client, pas une vraie erreur de ScraperAPI). On
-  // réessaie sur un timeout/erreur réseau, sur un 429 ("trop de requêtes
-  // simultanées") et sur tout 5xx (erreur transitoire côté ScraperAPI ou de
-  // la cible relayée) : dans ces cas, patienter et retenter suffit
-  // généralement. Un 500 n'était jusqu'ici jamais réessayé (bug — la
+  // plus de 25s, voire plus quand ScraperAPI doit contourner activement la
+  // protection Akamai de Tesla — remonté de 45s à 75s le 29/08/2026 pour
+  // laisser cette marge plutôt que de couper une requête qui aurait fini par
+  // aboutir. On réessaie sur un timeout/erreur réseau, sur un 429 ("trop de
+  // requêtes simultanées") et sur tout 5xx (erreur transitoire côté
+  // ScraperAPI ou de la cible relayée) : dans ces cas, patienter et retenter
+  // suffit généralement. Un 500 n'était jusqu'ici jamais réessayé (bug — la
   // condition ne couvrait que le 429), repéré en prod le 29/08/2026 via le
   // workflow GitHub Actions (voir .github/workflows/check-prices.yml).
   //
@@ -164,7 +165,7 @@ export async function fetchPricesForModel(
   const MAX_ATTEMPTS = 3;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
-      response = await fetch(proxyUrl, { signal: AbortSignal.timeout(45000) });
+      response = await fetch(proxyUrl, { signal: AbortSignal.timeout(75000) });
       if (response.status !== 429 && response.status < 500) break;
     } catch (err) {
       lastError = err;

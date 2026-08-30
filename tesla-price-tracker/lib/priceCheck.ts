@@ -78,8 +78,10 @@ export interface CheckPricesResult {
 // résultat pire qu'à 3 (0/5 réussis contre 2/5), sans doute parce que 5
 // requêtes simultanées saturent le pool d'IP résidentielles de ScraperAPI et
 // ralentissent chaque requête individuelle au point de dépasser le timeout
-// client. Revenu à 3 — ne pas remonter sans revalider en prod.
-const CONCURRENCY = 3;
+// client. Redescendu à 2 (marge supplémentaire sous la limite de 5 threads
+// du plan ScraperAPI, cf. dashboard) — ne pas remonter sans revalider en
+// prod.
+const CONCURRENCY = 2;
 
 async function runChecks(
   tasks: { country: (typeof COUNTRIES)[number]; model: (typeof MODELS)[number] }[]
