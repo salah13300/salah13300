@@ -17,13 +17,25 @@ export const maxDuration = 290;
 // quelle sur un appel identique suivant).
 export const dynamic = "force-dynamic";
 
+// export const dynamic seul ne suffisait pas à empêcher un réponse
+// identique d'être resservie sur un appel suivant (repéré le 30/08/2026 :
+// deux appels successifs vers le même pays/modèle renvoyaient exactement
+// le même résultat en quelques centaines de ms, alors qu'un vrai relevé
+// prend au minimum plusieurs dizaines de secondes) — en-tête explicite en
+// plus, au cas où une couche de cache (CDN Vercel...) l'exigerait.
+function jsonNoStore(body: unknown, init?: ResponseInit) {
+  const response = NextResponse.json(body, init);
+  response.headers.set("Cache-Control", "no-store, must-revalidate");
+  return response;
+}
+
 // Toujours en GET : c'était historiquement le cron Vercel qui appelait cette
 // route (toujours en GET, jamais POST), conservé pour un appel manuel simple.
 export async function GET(request: Request) {
   // Sécurité minimale : vérifier un secret partagé pour éviter les appels non autorisés
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    return jsonNoStore({ error: "Non autorisé" }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -33,7 +45,7 @@ export async function GET(request: Request) {
   if (countryParam) {
     const parsed = countrySchema.safeParse(countryParam);
     if (!parsed.success) {
-      return NextResponse.json({ error: "Paramètre 'country' invalide" }, { status: 400 });
+      return jsonNoStore({ error: "Paramètre 'country' invalide" }, { status: 400 });
     }
 
     // 'models' optionnel : ne vérifie qu'un sous-ensemble des modèles du
@@ -41,10 +53,10 @@ export async function GET(request: Request) {
     if (modelsParam) {
       const parsedModels = modelsListSchema.safeParse(modelsParam);
       if (!parsedModels.success) {
-        return NextResponse.json({ error: "Paramètre 'models' invalide" }, { status: 400 });
+        return jsonNoStore({ error: "Paramètre 'models' invalide" }, { status: 400 });
       }
       const result = await checkPricesForCountryModels(parsed.data, parsedModels.data);
-      return NextResponse.json({
+      return jsonNoStore({
         status: "ok",
         country: parsed.data,
         models: parsedModels.data,
@@ -53,11 +65,11 @@ export async function GET(request: Request) {
     }
 
     const result = await checkPricesForCountry(parsed.data);
-    return NextResponse.json({ status: "ok", country: parsed.data, ...result });
+    return jsonNoStore({ status: "ok", country: parsed.data, ...result });
   }
 
   // Sans paramètre : vérifie tous les pays (utile en local/CI où le temps
   // d'exécution n'est pas contraint — voir scripts/check-prices.ts).
   const result = await checkAllPrices();
-  return NextResponse.json({ status: "ok", ...result });
+  return jsonNoStore({ status: "ok", ...result });
 }
