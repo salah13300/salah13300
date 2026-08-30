@@ -21,12 +21,14 @@
  * données. Comme on cible directement l'API JSON de Tesla (pas une page
  * HTML à rendre), pas besoin du rendu JS de ScraperAPI (plus cher).
  *
- * En revanche, le paramètre `premium=true` EST nécessaire (contrairement à
- * ce qu'on pensait initialement) : tesla.com est un "domaine protégé" côté
- * ScraperAPI (Akamai) — sans ce paramètre, ScraperAPI utilise son pool de
- * proxies standard, insuffisant, et renvoie un 500 explicite le demandant.
- * Repéré en prod le 29/08/2026 après une journée d'échecs quasi
- * systématiques à tort attribués à la concurrence/au volume de requêtes.
+ * En revanche, un paramètre "protected domain" ScraperAPI EST nécessaire
+ * (contrairement à ce qu'on pensait initialement) : tesla.com est protégé
+ * par Akamai côté ScraperAPI — sans ce paramètre, ScraperAPI utilise son
+ * pool de proxies standard, insuffisant, et renvoie un 500 explicite le
+ * demandant. `premium=true` seul n'a pas suffi ; passé à `ultra_premium=true`
+ * (échelon suivant suggéré par ScraperAPI). Repéré en prod le 29/08/2026
+ * après une journée d'échecs quasi systématiques à tort attribués à la
+ * concurrence/au volume de requêtes.
  */
 
 import { COUNTRIES, MODELS } from "./countries";
@@ -148,14 +150,12 @@ export async function fetchPricesForModel(
   }
 
   const targetUrl = buildTeslaApiUrl(countryCode, modelSlug);
-  // premium=true : requis par ScraperAPI pour les "domaines protégés" —
-  // message d'erreur explicite obtenu en prod le 29/08/2026 ("Protected
-  // domains may require adding premium=true OR ultra_premium=true
-  // parameter to your request") sur tesla.com (protégé par Akamai). Sans ce
-  // paramètre, ScraperAPI utilise son pool de proxies standard, insuffisant
-  // ici — d'où les échecs quasi systématiques observés toute la journée
-  // (pas un problème de concurrence, de timeout ou de volume de requêtes).
-  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&premium=true&url=${encodeURIComponent(targetUrl)}`;
+  // ultra_premium=true : premium=true seul n'a pas suffi (même message
+  // d'erreur ScraperAPI obtenu avec, en prod le 29/08/2026) — soit
+  // insuffisant face à Akamai, soit non inclus dans le plan d'essai actuel.
+  // ultra_premium est l'échelon suivant suggéré par ScraperAPI dans son
+  // propre message d'erreur pour les domaines protégés.
+  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&ultra_premium=true&url=${encodeURIComponent(targetUrl)}`;
 
   let response: Response | undefined;
   let lastError: unknown;
