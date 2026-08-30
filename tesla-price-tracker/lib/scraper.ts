@@ -157,7 +157,17 @@ export async function fetchPricesForModel(
   // face à Tesla/Akamai avec le même 500 générique — insuffisant pour ce
   // domaine précis. ultra_premium n'est pas réservé à un plan supérieur
   // (juste 30 crédits/requête réussie au lieu de 10, utilisable sur Hobby).
-  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&ultra_premium=true&url=${encodeURIComponent(targetUrl)}`;
+  //
+  // render=true : découverte le 30/08/2026 en ouvrant l'URL cible
+  // directement dans un navigateur normal (donc sans même passer par
+  // ScraperAPI) — Tesla renvoie {"cpr_chlge":"true",...}, un challenge
+  // anti-bot Akamai, pas les résultats. Cette API a donc besoin d'une vraie
+  // session de navigateur (JS exécuté, cookies/sensor établis), pas juste
+  // d'une bonne IP — l'hypothèse initiale ("cible une API JSON, pas besoin
+  // du rendu JS") était fausse. render=true fait passer la requête par un
+  // vrai navigateur headless côté ScraperAPI, capable de résoudre ce
+  // challenge.
+  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&ultra_premium=true&render=true&url=${encodeURIComponent(targetUrl)}`;
 
   let response: Response | undefined;
   let lastError: unknown;
@@ -228,7 +238,7 @@ export async function fetchRawInventoryForDebug(
   }
 
   const targetUrl = buildTeslaApiUrl(countryCode, modelSlug);
-  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&ultra_premium=true&url=${encodeURIComponent(targetUrl)}`;
+  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&ultra_premium=true&render=true&url=${encodeURIComponent(targetUrl)}`;
 
   const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(75000) });
   const raw = await response.json().catch(async () => await response.text());
