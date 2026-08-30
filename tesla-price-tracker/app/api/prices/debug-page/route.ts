@@ -6,6 +6,13 @@ import { NextResponse } from "next/server";
 // pricing de se terminer) et extrait les motifs ressemblant à un prix, pour
 // repérer où et sous quelle forme le prix apparaît dans le HTML final.
 export const maxDuration = 90;
+// Repéré le 30/08/2026 : même avec cache: "no-store" sur le fetch() interne
+// vers ScraperAPI, deux appels identiques renvoyaient la même réponse
+// (tronquée) en ~400ms — beaucoup trop rapide pour un vrai aller-retour.
+// La réponse de LA ROUTE elle-même était mise en cache par Vercel, pas
+// seulement l'appel interne. force-dynamic empêche toute mise en cache de
+// la réponse de cette route.
+export const dynamic = "force-dynamic";
 
 // Restreint à tesla.com : évite qu'un appelant fasse relayer n'importe
 // quelle URL arbitraire via notre clé ScraperAPI (SSRF/abus de crédits).

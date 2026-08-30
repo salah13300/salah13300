@@ -11,6 +11,11 @@ import { countrySchema, modelsListSchema } from "@/lib/validation";
 // lib/scraper.ts). Cette route reste utile pour un déclenchement manuel/debug
 // (curl ou fetch() avec le header Authorization ci-dessous).
 export const maxDuration = 290;
+// Empêche Vercel de mettre en cache la réponse de cette route (voir
+// lib/scraper.ts pour le détail du bug de cache repéré le 30/08/2026 sur
+// une route similaire — une réponse ratée pouvait être resservie telle
+// quelle sur un appel identique suivant).
+export const dynamic = "force-dynamic";
 
 // Toujours en GET : c'était historiquement le cron Vercel qui appelait cette
 // route (toujours en GET, jamais POST), conservé pour un appel manuel simple.
