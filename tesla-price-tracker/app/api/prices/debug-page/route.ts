@@ -50,19 +50,24 @@ export async function GET(request: Request) {
     ].map((m) => m[0]);
 
     // Motifs plausibles pour un prix affiché en euros — Tesla utilise
-    // &nbsp; (pas un espace normal) entre les chiffres et avant le symbole
-    // monétaire, ex. "36 601&nbsp;€".
+    // &nbsp; (pas un espace normal), parfois PLUSIEURS fois dans un même
+    // nombre (ex. "37&nbsp;133&nbsp;€"), pas juste juste avant le symbole
+    // monétaire comme le motif précédent le supposait (repéré le
+    // 30/08/2026 : aucun grand prix trouvé sur la page BE alors que la
+    // page était bien rendue en entier).
     const euroSign = String.fromCharCode(0x20ac);
     const priceRegex = new RegExp(
-      "[0-9][0-9\\s.,]{2,12}(&nbsp;)?\\s?" + euroSign,
+      "[0-9](?:[0-9\\s.,]|&nbsp;)*\\s?" + euroSign,
       "g"
     );
     const priceMatches = [...html.matchAll(priceRegex)].map((m) => m[0]);
 
-    // Contexte textuel autour de "Prix d'achat" / "purchase" pour situer où
-    // le prix apparaît dans la structure de la page.
+    // Contexte textuel autour de "Prix d'achat" / "purchase" / "/mois" pour
+    // situer où le prix apparaît dans la structure de la page — "/mois"
+    // cible le bloc de prix principal (mensualité + prix d'achat total),
+    // plus universel qu'une mention légale spécifique à un marché.
     const contextMatches = [
-      ...html.matchAll(/.{80}(Prix d.achat|purchase[_ -]?price|BasePrice).{80}/gi),
+      ...html.matchAll(/.{80}(Prix d.achat|purchase[_ -]?price|BasePrice|\/mois|\/mo\b).{80}/gi),
     ].map((m) => m[0]);
 
     return NextResponse.json({
