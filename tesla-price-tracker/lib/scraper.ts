@@ -57,6 +57,29 @@ const MODEL_CONFIGURATOR_PATH: Record<string, string> = {
   cybertruck: "cybertruck",
 };
 
+// Symbole monétaire affiché sur la page, par devise (COUNTRIES.currency) —
+// utilisé pour repérer les montants dans le HTML sans dépendre d'une
+// mention légale spécifique à un marché (voir parseConfiguratorPrice).
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  EUR: "€",
+  GBP: "£",
+  DKK: "kr",
+  SEK: "kr",
+  PLN: "zł",
+};
+
+// Fourchette plausible pour un prix de véhicule Tesla neuf, par devise —
+// nécessaire car un simple seuil en euros (15 000-200 000) ne convient pas
+// aux devises à valeur unitaire très différente (ex. couronnes, zloty).
+// Volontairement large pour couvrir toute la gamme (Model 3 au Model X).
+const PLAUSIBLE_PRICE_RANGE: Record<string, [number, number]> = {
+  EUR: [15000, 200000],
+  GBP: [15000, 200000],
+  DKK: [110000, 1500000],
+  SEK: [160000, 2200000],
+  PLN: [60000, 900000],
+};
+
 export function buildTeslaConfiguratorUrl(countryCode: string, modelSlug: string): string {
   const country = COUNTRIES.find((c) => c.code === countryCode);
   const model = MODELS.find((m) => m.slug === modelSlug);
@@ -104,24 +127,37 @@ function parseConfiguratorPrice(
   const country = COUNTRIES.find((c) => c.code === countryCode);
   const currency = country?.currency ?? "EUR";
 
-  // Capture les chiffres/séparateurs (espace normal, insécable via &nbsp;,
-  // virgule, point) juste après l'ancre, jusqu'au premier caractère qui n'en
-  // fait pas partie (symbole monétaire, lettre...).
-  const anchorMatch = html.match(/data-id="footer-price-disclaimer">([^<]*)/i);
-  if (!anchorMatch) {
+  // Repéré le 30/08/2026 : une ancre HTML précise ("footer-price-disclaimer",
+  // trouvée sur la page FR) n'est pas universelle — absente sur BE alors que
+  // la page était bien rendue en entier avec un vrai prix affiché. Stratégie
+  // plus robuste, indépendante de la langue/mise en page : chercher TOUS les
+  // montants accolés au symbole monétaire du pays, et prendre le plus PETIT
+  // dans une fourchette plausible pour un prix de véhicule (PLAUSIBLE_PRICE_
+  // RANGE, adaptée à la devise) — les mensualités, frais de dossier et
+  // bonus/malus affichés à côté sont toujours nettement en dehors de cette
+  // fourchette. Exiger le
+  // symbole monétaire (pas juste une suite de chiffres) évite de capter par
+  // erreur un kilométrage de leasing (ex. "15 000 km") qui tomberait sinon
+  // dans la même fourchette numérique.
+  const symbol = CURRENCY_SYMBOLS[currency] ?? "€";
+  const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const numberPart = "[\\d](?:[\\d\\s.,]|&nbsp;)*";
+  const separator = "(?:&nbsp;|\\s)?";
+  const priceRegex = new RegExp(
+    `(?:${numberPart}${separator}${escapedSymbol})|(?:${escapedSymbol}${separator}${numberPart})`,
+    "g"
+  );
+
+  const [minPlausible, maxPlausible] = PLAUSIBLE_PRICE_RANGE[currency] ?? [15000, 200000];
+  const priceMatches = [...html.matchAll(priceRegex)]
+    .map((m) => parseLocalizedPrice(m[0].replace(new RegExp(escapedSymbol, "g"), "")))
+    .filter((n) => Number.isFinite(n) && n >= minPlausible && n <= maxPlausible);
+
+  if (priceMatches.length === 0) {
     return [];
   }
 
-  const numberMatch = anchorMatch[1].match(/[\d](?:[\d\s.,]|&nbsp;)*/i);
-  if (!numberMatch) {
-    return [];
-  }
-
-  const price = parseLocalizedPrice(numberMatch[0]);
-
-  if (!Number.isFinite(price)) {
-    return [];
-  }
+  const price = Math.min(...priceMatches);
 
   return [
     {
