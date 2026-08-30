@@ -65,6 +65,30 @@ export function buildTeslaConfiguratorUrl(countryCode: string, modelSlug: string
   return `https://www.tesla.com/${localePath}/${configuratorPath}/design#overview`;
 }
 
+// Convertit un nombre affiché dans un format localisé (ex. "36 601",
+// "36.601,00" en allemand/italien, ou "36,601.00" en anglais) en nombre
+// JS. Bug repéré le 30/08/2026 : un simple remplacement de la première
+// virgule par un point cassait les marchés utilisant le point comme
+// séparateur de milliers (ex. "36.601,00" devenait "36.601.00", que
+// parseFloat tronque à 36.601 au lieu de 36601). Règle : le dernier
+// séparateur (point ou virgule) suivi d'exactement 2 chiffres jusqu'à la
+// fin est le séparateur décimal ; tous les autres sont des séparateurs de
+// milliers à retirer.
+function parseLocalizedPrice(raw: string): number {
+  const stripped = raw.replace(/&nbsp;/gi, "").replace(/\s/g, "");
+  const lastSeparatorMatch = stripped.match(/[.,](\d{2})$/);
+
+  if (lastSeparatorMatch) {
+    const decimalPart = lastSeparatorMatch[1];
+    const integerPart = stripped
+      .slice(0, stripped.length - decimalPart.length - 1)
+      .replace(/[.,]/g, "");
+    return parseFloat(`${integerPart}.${decimalPart}`);
+  }
+
+  return parseFloat(stripped.replace(/[.,]/g, ""));
+}
+
 function parseConfiguratorPrice(
   html: string,
   countryCode: string,
@@ -86,11 +110,7 @@ function parseConfiguratorPrice(
     return [];
   }
 
-  const cleaned = numberMatch[0]
-    .replace(/&nbsp;/gi, "")
-    .replace(/\s/g, "")
-    .replace(",", ".");
-  const price = parseFloat(cleaned);
+  const price = parseLocalizedPrice(numberMatch[0]);
 
   if (!Number.isFinite(price)) {
     return [];
