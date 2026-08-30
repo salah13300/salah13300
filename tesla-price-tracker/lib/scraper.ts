@@ -118,10 +118,13 @@ export function buildTeslaApiUrl(countryCode: string, modelSlug: string): string
       lng: country.anchor.lng,
       lat: country.anchor.lat,
       zip: country.anchor.zip,
-      // Rayon de recherche large (au lieu du 0 observé dans la capture, qui
-      // limite au strict voisinage du code postal) pour capter les
-      // véhicules disponibles dans tout le pays.
-      range: 200,
+      // Revenu à 0 (valeur réellement observée dans la capture DevTools
+      // d'origine) : passé à 200 en supposant élargir la recherche à tout
+      // le pays, mais total_matches_found revient systématiquement à 0
+      // avec cette valeur (vérifié en prod le 30/08/2026 via
+      // /api/prices/debug) — 200 est probablement rejeté/invalide côté
+      // Tesla plutôt qu'interprété comme "rayon large".
+      range: 0,
       region: country.teslaMarket,
     },
     offset: 0,
