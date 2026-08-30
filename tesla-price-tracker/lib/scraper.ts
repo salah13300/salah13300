@@ -188,15 +188,24 @@ async function fetchRenderedHtml(targetUrl: string): Promise<string> {
   // fichier) — coûte plus cher en crédits ScraperAPI mais indispensable ici.
   const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&ultra_premium=true&render=true&url=${encodeURIComponent(targetUrl)}`;
 
-  let response: Response | undefined;
   let lastError: unknown;
+  let lastHtml: string | undefined;
+
+  // Taille observée d'un rendu complet et réussi : ~1,2 à 1,6 million de
+  // caractères (page configurateur entièrement hydratée). Un rendu raté
+  // (ScraperAPI renvoie parfois un 200 avec seulement le squelette HTML
+  // initial, ~12 000 caractères — repéré le 30/08/2026 sur model-s, mais
+  // ça peut arriver ponctuellement sur n'importe quel modèle/pays) est donc
+  // largement en-dessous de ce seuil.
+  const MIN_HTML_LENGTH = 200000;
 
   // 3 tentatives, 75s par tentative : le relevé quotidien passe par le
   // workflow GitHub Actions (.github/workflows/check-prices.yml), sans
   // limite de temps stricte contrairement aux fonctions serverless Vercel.
   // On réessaie sur timeout/erreur réseau, 429 (trop de requêtes
-  // simultanées) et tout 5xx (erreur transitoire côté ScraperAPI ou de la
-  // cible relayée).
+  // simultanées), tout 5xx (erreur transitoire côté ScraperAPI ou de la
+  // cible relayée), et maintenant aussi sur une page anormalement courte
+  // (rendu JS incomplet côté ScraperAPI, même avec un 200 OK).
   //
   // cache: "no-store" indispensable : Next.js met en cache les appels
   // fetch() par défaut (même à l'intérieur d'une route dynamique) — repéré
@@ -208,31 +217,45 @@ async function fetchRenderedHtml(targetUrl: string): Promise<string> {
   const MAX_ATTEMPTS = 3;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
-      response = await fetch(proxyUrl, { signal: AbortSignal.timeout(85000), cache: "no-store" });
-      if (response.status !== 429 && response.status < 500) break;
+      const response = await fetch(proxyUrl, {
+        signal: AbortSignal.timeout(85000),
+        cache: "no-store",
+      });
+
+      if (response.status === 429 || response.status >= 500) {
+        lastError = new Error(`Statut ${response.status}`);
+      } else if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(`Échec de récupération de la page: ${response.status} ${body.slice(0, 300)}`);
+      } else {
+        const html = await response.text();
+        lastHtml = html;
+        if (html.length >= MIN_HTML_LENGTH) {
+          return html;
+        }
+        lastError = new Error(`Page anormalement courte (${html.length} caractères)`);
+      }
     } catch (err) {
       lastError = err;
-      response = undefined;
     }
     if (attempt < MAX_ATTEMPTS - 1) {
       await sleep(3000 * (attempt + 1));
     }
   }
 
-  if (!response) {
-    throw new Error(
-      `Échec de récupération de la page: ${
-        lastError instanceof Error ? lastError.message : String(lastError)
-      }`
-    );
+  // Toutes les tentatives ont renvoyé une page trop courte (ou ont échoué) :
+  // on utilise quand même le dernier HTML obtenu si on en a un — parfois la
+  // page est complète mais simplement plus courte que le seuil (ex. un
+  // modèle avec moins d'options) — sinon on remonte l'erreur.
+  if (lastHtml !== undefined) {
+    return lastHtml;
   }
 
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`Échec de récupération de la page: ${response.status} ${body.slice(0, 300)}`);
-  }
-
-  return response.text();
+  throw new Error(
+    `Échec de récupération de la page: ${
+      lastError instanceof Error ? lastError.message : String(lastError)
+    }`
+  );
 }
 
 export async function fetchPricesForModel(
