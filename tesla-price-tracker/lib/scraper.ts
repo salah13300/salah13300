@@ -1,33 +1,33 @@
 /**
  * Scraper des prix Tesla neufs.
  *
- * Endpoint et forme de requête VÉRIFIÉS le 29/08/2026 par capture DevTools
- * d'une vraie requête réussie faite par tesla.com/fr_fr/inventory/new/m3
- * (onglet Network, filtre Fetch/XHR, requête "inventory-results", status
- * 200) : /inventory/api/v4/inventory-results, réponse dans
- * results.exact[]/results.approximate[].
+ * PIVOT (30/08/2026) : l'approche précédente (API d'inventaire
+ * /inventory/api/v4/inventory-results) est abandonnée. Elle listait les
+ * véhicules réellement en stock, mais :
+ * 1. Elle nécessite un vrai rendu navigateur pour passer le challenge
+ *    anti-bot Akamai (`render=true` côté ScraperAPI) — découvert en ouvrant
+ *    l'URL cible directement dans un navigateur normal, qui renvoyait
+ *    {"cpr_chlge":"true",...} au lieu des résultats.
+ * 2. Même une fois ce point réglé, elle renvoie légitimement 0 résultat
+ *    dès qu'aucun véhicule neuf n'est en stock sur le marché visé (ce qui
+ *    est le cas normal pour la France en ce moment) — pas un bug, mais pas
+ *    exploitable pour un suivi de prix quotidien fiable.
  *
- * Deux approches testées en production avant celle-ci, toutes les deux
- * bloquées par la protection anti-bot Akamai de Tesla (IP du datacenter
- * Vercel repérée comme non-humaine) :
- * 1. fetch() serveur direct, même avec les en-têtes exacts observés → 403
- *    systématique.
- * 2. Navigateur headless (Playwright) → bloqué avec une page "Access
- *    Denied" explicite avant même que le JS ne s'exécute.
+ * Nouvelle approche : scraper directement la page configurateur publique
+ * (ex. tesla.com/fr_fr/model3/design#overview), qui affiche le prix
+ * catalogue de la configuration de base — toujours disponible, que du
+ * stock existe ou non. Le prix n'est pas présent dans le HTML initial
+ * (récupéré par Tesla via un appel séparé vers sa "pricing gateway" après
+ * chargement) : `render=true` est nécessaire pour laisser ce rendu se
+ * terminer avant de lire le HTML final.
  *
- * Solution retenue : router la requête via ScraperAPI (SCRAPERAPI_KEY),
- * qui dispose d'un grand pool d'IP résidentielles — la requête arrive chez
- * Tesla comme si elle venait d'un vrai visiteur, pas d'un centre de
- * données. Comme on cible directement l'API JSON de Tesla (pas une page
- * HTML à rendre), pas besoin du rendu JS de ScraperAPI (plus cher).
+ * Ancre repérée le 30/08/2026 dans le HTML rendu, stable sur plusieurs
+ * vérifications :
+ *   data-id="footer-price-disclaimer">36 601&nbsp;€ Prix d'achat</p>
  *
- * IMPORTANT (29/08/2026) : tesla.com est un domaine "protégé" côté
- * ScraperAPI (Akamai), qui nécessite `premium=true` (ou `ultra_premium=true`
- * pour les cas les plus difficiles). Sur le plan gratuit d'essai, ces
- * paramètres étaient refusés (403 "Your current plan does not allow you to
- * use our premium proxies") — ce qui expliquait la fiabilité limitée et
- * variable observée avec le pool standard. Débloqué par le passage au plan
- * payant Hobby.
+ * Limite connue : ne donne que le prix de la configuration de base
+ * affichée par défaut (finition la moins chère), pas un prix par finition
+ * comme le faisait l'ancienne API d'inventaire.
  */
 
 import { COUNTRIES, MODELS } from "./countries";
@@ -40,157 +40,104 @@ export interface PriceResult {
   currency: string;
 }
 
-interface InventoryItem {
-  Price?: number;
-  InventoryPrice?: number;
-  TotalPrice?: number;
-  TrimName?: string;
-  Trim?: string;
-  CurrencyCode?: string;
-}
+// Chemin URL du configurateur Tesla par modèle — différent du code modèle
+// ("teslaModel") utilisé par l'ancienne API d'inventaire.
+const MODEL_CONFIGURATOR_PATH: Record<string, string> = {
+  "model-3": "model3",
+  "model-y": "modely",
+  "model-s": "models",
+  "model-x": "modelx",
+  cybertruck: "cybertruck",
+};
 
-interface InventoryResponse {
-  results?: {
-    exact?: InventoryItem[];
-    approximate?: InventoryItem[];
-    approximateOutside?: InventoryItem[];
-  };
-  total_matches_found?: number;
-}
-
-function parsePriceResponse(
-  raw: InventoryResponse,
-  country: string,
-  model: string
-): PriceResult[] {
-  const results: PriceResult[] = [];
-  const defaultCurrency = COUNTRIES.find((c) => c.code === country)?.currency ?? "EUR";
-
-  // "exact" = correspond pile aux critères de recherche ; on complète avec
-  // "approximate" (résultats proches) si aucun résultat exact, pour éviter
-  // des trous de données quand le marché est peu fourni sur un modèle.
-  const items = [
-    ...(raw.results?.exact ?? []),
-    ...(raw.results?.exact?.length ? [] : raw.results?.approximate ?? []),
-  ];
-
-  for (const item of items) {
-    const price = item.Price ?? item.InventoryPrice ?? item.TotalPrice;
-    const trimName = item.TrimName ?? item.Trim ?? "Standard";
-
-    if (typeof price === "number") {
-      results.push({
-        country,
-        model,
-        trim: String(trimName),
-        priceCents: Math.round(price * 100),
-        currency: item.CurrencyCode ?? defaultCurrency,
-      });
-    }
-  }
-
-  return results;
-}
-
-const INVENTORY_API_URL = "https://www.tesla.com/inventory/api/v4/inventory-results";
-
-export function buildTeslaApiUrl(countryCode: string, modelSlug: string): string {
+export function buildTeslaConfiguratorUrl(countryCode: string, modelSlug: string): string {
   const country = COUNTRIES.find((c) => c.code === countryCode);
   const model = MODELS.find((m) => m.slug === modelSlug);
+  const configuratorPath = MODEL_CONFIGURATOR_PATH[modelSlug];
 
-  if (!country || !model) {
+  if (!country || !model || !configuratorPath) {
     throw new Error(`Pays ou modèle inconnu: ${countryCode}/${modelSlug}`);
   }
 
-  const query = {
-    query: {
-      model: model.teslaModel,
-      condition: "new",
-      options: {},
-      arrangeby: "Price",
-      order: "asc",
-      market: country.teslaMarket,
-      language: country.teslaLanguage,
-      // Valeur fixe observée dans la vraie requête, quel que soit le pays.
-      super_region: "north america",
-      PaymentType: "cash",
-      paymentRange: "0,999999",
-      lng: country.anchor.lng,
-      lat: country.anchor.lat,
-      zip: country.anchor.zip,
-      // Revenu à 0 (valeur réellement observée dans la capture DevTools
-      // d'origine) : passé à 200 en supposant élargir la recherche à tout
-      // le pays, mais total_matches_found revient systématiquement à 0
-      // avec cette valeur (vérifié en prod le 30/08/2026 via
-      // /api/prices/debug) — 200 est probablement rejeté/invalide côté
-      // Tesla plutôt qu'interprété comme "rayon large".
-      range: 0,
-      region: country.teslaMarket,
-    },
-    offset: 0,
-    count: 50,
-    outsideOffset: 0,
-    outsideSearch: false,
-    isFalconDeliverySelectionEnabled: true,
-    version: "v2",
-  };
+  // Tesla utilise le code locale en minuscules dans ses URLs (ex. fr_fr),
+  // alors que COUNTRIES.locale est au format "fr_FR".
+  const localePath = country.locale.toLowerCase();
+  return `https://www.tesla.com/${localePath}/${configuratorPath}/design#overview`;
+}
 
-  return `${INVENTORY_API_URL}?query=${encodeURIComponent(JSON.stringify(query))}`;
+function parseConfiguratorPrice(
+  html: string,
+  countryCode: string,
+  modelSlug: string
+): PriceResult[] {
+  const country = COUNTRIES.find((c) => c.code === countryCode);
+  const currency = country?.currency ?? "EUR";
+
+  // Capture les chiffres/séparateurs (espace normal, insécable via &nbsp;,
+  // virgule, point) juste après l'ancre, jusqu'au premier caractère qui n'en
+  // fait pas partie (symbole monétaire, lettre...).
+  const anchorMatch = html.match(/data-id="footer-price-disclaimer">([^<]*)/i);
+  if (!anchorMatch) {
+    return [];
+  }
+
+  const numberMatch = anchorMatch[1].match(/[\d](?:[\d\s.,]|&nbsp;)*/i);
+  if (!numberMatch) {
+    return [];
+  }
+
+  const cleaned = numberMatch[0]
+    .replace(/&nbsp;/gi, "")
+    .replace(/\s/g, "")
+    .replace(",", ".");
+  const price = parseFloat(cleaned);
+
+  if (!Number.isFinite(price)) {
+    return [];
+  }
+
+  return [
+    {
+      country: countryCode,
+      model: modelSlug,
+      trim: "Standard",
+      priceCents: Math.round(price * 100),
+      currency,
+    },
+  ];
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function fetchPricesForModel(
-  countryCode: string,
-  modelSlug: string
-): Promise<PriceResult[]> {
+async function fetchRenderedHtml(targetUrl: string): Promise<string> {
   const apiKey = process.env.SCRAPERAPI_KEY;
   if (!apiKey) {
     throw new Error("SCRAPERAPI_KEY manquant dans les variables d'environnement");
   }
 
-  const targetUrl = buildTeslaApiUrl(countryCode, modelSlug);
-  // ultra_premium=true : premium=true seul, testé une fois le plan payant
-  // Hobby actif (donc plus bloqué par un 403 de plan), échoue quand même
-  // face à Tesla/Akamai avec le même 500 générique — insuffisant pour ce
-  // domaine précis. ultra_premium n'est pas réservé à un plan supérieur
-  // (juste 30 crédits/requête réussie au lieu de 10, utilisable sur Hobby).
-  //
-  // render=true : découverte le 30/08/2026 en ouvrant l'URL cible
-  // directement dans un navigateur normal (donc sans même passer par
-  // ScraperAPI) — Tesla renvoie {"cpr_chlge":"true",...}, un challenge
-  // anti-bot Akamai, pas les résultats. Cette API a donc besoin d'une vraie
-  // session de navigateur (JS exécuté, cookies/sensor établis), pas juste
-  // d'une bonne IP — l'hypothèse initiale ("cible une API JSON, pas besoin
-  // du rendu JS") était fausse. render=true fait passer la requête par un
-  // vrai navigateur headless côté ScraperAPI, capable de résoudre ce
-  // challenge.
+  // ultra_premium=true : tesla.com est un domaine protégé côté ScraperAPI
+  // (Akamai) — le pool standard et même premium=true se sont révélés
+  // insuffisants en pratique (vérifié en prod le 29-30/08/2026).
+  // render=true : nécessaire pour laisser le temps à l'appel JS de pricing
+  // de se terminer avant de lire le HTML (voir docstring en haut du
+  // fichier) — coûte plus cher en crédits ScraperAPI mais indispensable ici.
   const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&ultra_premium=true&render=true&url=${encodeURIComponent(targetUrl)}`;
 
   let response: Response | undefined;
   let lastError: unknown;
 
-  // Un aller-retour relayé par ScraperAPI (IP résidentielle) prend souvent
-  // plus de 25s, voire plus quand ScraperAPI doit contourner activement la
-  // protection Akamai de Tesla — remonté de 45s à 75s le 29/08/2026 pour
-  // laisser cette marge plutôt que de couper une requête qui aurait fini par
-  // aboutir. On réessaie sur un timeout/erreur réseau, sur un 429 ("trop de
-  // requêtes simultanées") et sur tout 5xx (erreur transitoire côté
-  // ScraperAPI ou de la cible relayée) : dans ces cas, patienter et retenter
-  // suffit généralement. Un 500 n'était jusqu'ici jamais réessayé (bug — la
-  // condition ne couvrait que le 429), repéré en prod le 29/08/2026 via le
-  // workflow GitHub Actions (voir .github/workflows/check-prices.yml).
-  //
-  // 3 tentatives : le relevé quotidien passe désormais par ce workflow
-  // GitHub Actions, sans limite de temps stricte (contrairement aux
-  // fonctions serverless Vercel) — plus besoin de sacrifier des tentatives
-  // pour tenir dans un budget de 290s.
+  // 3 tentatives, 75s par tentative : le relevé quotidien passe par le
+  // workflow GitHub Actions (.github/workflows/check-prices.yml), sans
+  // limite de temps stricte contrairement aux fonctions serverless Vercel.
+  // On réessaie sur timeout/erreur réseau, 429 (trop de requêtes
+  // simultanées) et tout 5xx (erreur transitoire côté ScraperAPI ou de la
+  // cible relayée).
   const MAX_ATTEMPTS = 3;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
-      response = await fetch(proxyUrl, { signal: AbortSignal.timeout(75000) });
+      response = await fetch(proxyUrl, { signal: AbortSignal.timeout(85000) });
       if (response.status !== 429 && response.status < 500) break;
     } catch (err) {
       lastError = err;
@@ -203,45 +150,25 @@ export async function fetchPricesForModel(
 
   if (!response) {
     throw new Error(
-      `Échec de récupération des prix pour ${modelSlug}/${countryCode}: ${
+      `Échec de récupération de la page: ${
         lastError instanceof Error ? lastError.message : String(lastError)
       }`
     );
   }
 
   if (!response.ok) {
-    // Le corps de la réponse (tronqué) donne souvent la vraie raison côté
-    // ScraperAPI (clé invalide, quota épuisé, cible injoignable...) — un
-    // simple code de statut ne suffisait pas à diagnostiquer un 500
-    // systématique (voir workflow GitHub Actions du 29/08/2026).
     const body = await response.text().catch(() => "");
-    throw new Error(
-      `Échec de récupération des prix pour ${modelSlug}/${countryCode}: ${response.status} ${body.slice(0, 300)}`
-    );
+    throw new Error(`Échec de récupération de la page: ${response.status} ${body.slice(0, 300)}`);
   }
 
-  const raw: InventoryResponse = await response.json();
-  return parsePriceResponse(raw, countryCode, modelSlug);
+  return response.text();
 }
 
-// Debug uniquement : mêmes appels réseau que fetchPricesForModel, mais
-// renvoie la réponse Tesla brute (avant extraction des prix) — pour
-// diagnostiquer un cas où la requête réussit mais total_matches_found/
-// results.exact sont vides. À supprimer une fois le diagnostic terminé.
-export async function fetchRawInventoryForDebug(
+export async function fetchPricesForModel(
   countryCode: string,
   modelSlug: string
-): Promise<{ targetUrl: string; status: number; raw: unknown }> {
-  const apiKey = process.env.SCRAPERAPI_KEY;
-  if (!apiKey) {
-    throw new Error("SCRAPERAPI_KEY manquant dans les variables d'environnement");
-  }
-
-  const targetUrl = buildTeslaApiUrl(countryCode, modelSlug);
-  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&ultra_premium=true&render=true&url=${encodeURIComponent(targetUrl)}`;
-
-  const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(75000) });
-  const raw = await response.json().catch(async () => await response.text());
-
-  return { targetUrl, status: response.status, raw };
+): Promise<PriceResult[]> {
+  const targetUrl = buildTeslaConfiguratorUrl(countryCode, modelSlug);
+  const html = await fetchRenderedHtml(targetUrl);
+  return parseConfiguratorPrice(html, countryCode, modelSlug);
 }
