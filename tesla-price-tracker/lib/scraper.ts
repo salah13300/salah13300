@@ -149,12 +149,12 @@ export async function fetchPricesForModel(
   }
 
   const targetUrl = buildTeslaApiUrl(countryCode, modelSlug);
-  // premium=true : nécessaire pour tesla.com, domaine "protégé" côté
-  // ScraperAPI (Akamai) — voir le docstring en haut du fichier. Refusé par
-  // le plan gratuit (403 "upgrade your plan"), débloqué le 29/08/2026 par
-  // le passage au plan payant Hobby (10 crédits/requête réussie, contre 30
-  // pour ultra_premium=true — à essayer seulement si premium ne suffit pas).
-  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&premium=true&url=${encodeURIComponent(targetUrl)}`;
+  // ultra_premium=true : premium=true seul, testé une fois le plan payant
+  // Hobby actif (donc plus bloqué par un 403 de plan), échoue quand même
+  // face à Tesla/Akamai avec le même 500 générique — insuffisant pour ce
+  // domaine précis. ultra_premium n'est pas réservé à un plan supérieur
+  // (juste 30 crédits/requête réussie au lieu de 10, utilisable sur Hobby).
+  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&ultra_premium=true&url=${encodeURIComponent(targetUrl)}`;
 
   let response: Response | undefined;
   let lastError: unknown;
