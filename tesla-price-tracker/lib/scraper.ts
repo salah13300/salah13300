@@ -28,6 +28,13 @@
  * Limite connue : ne donne que le prix de la configuration de base
  * affichée par défaut (finition la moins chère), pas un prix par finition
  * comme le faisait l'ancienne API d'inventaire.
+ *
+ * Model S / Model X : confirmé le 30/08/2026 (vérifié manuellement sur
+ * tesla.com/fr_fr) que ces modèles ne sont actuellement pas commandables
+ * neufs sur ce marché — "Commander" redirige vers l'inventaire
+ * d'occasion, pas de page configurateur avec prix catalogue. 0 résultat
+ * est donc le comportement attendu, pas un bug du scraper. Idem pour
+ * Cybertruck, non vendu en Europe.
  */
 
 import { COUNTRIES, MODELS } from "./countries";
