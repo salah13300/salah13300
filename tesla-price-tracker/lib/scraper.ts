@@ -21,14 +21,17 @@
  * données. Comme on cible directement l'API JSON de Tesla (pas une page
  * HTML à rendre), pas besoin du rendu JS de ScraperAPI (plus cher).
  *
- * En revanche, un paramètre "protected domain" ScraperAPI EST nécessaire
- * (contrairement à ce qu'on pensait initialement) : tesla.com est protégé
- * par Akamai côté ScraperAPI — sans ce paramètre, ScraperAPI utilise son
- * pool de proxies standard, insuffisant, et renvoie un 500 explicite le
- * demandant. `premium=true` seul n'a pas suffi ; passé à `ultra_premium=true`
- * (échelon suivant suggéré par ScraperAPI). Repéré en prod le 29/08/2026
- * après une journée d'échecs quasi systématiques à tort attribués à la
- * concurrence/au volume de requêtes.
+ * IMPORTANT — limite connue (29/08/2026) : tesla.com est un domaine
+ * "protégé" côté ScraperAPI (Akamai), qui recommande `premium=true` ou
+ * `ultra_premium=true` pour ces domaines. Les deux ont été testés en prod
+ * et renvoient un 403 explicite : "Your current plan does not allow you to
+ * use our premium proxies. Please upgrade your plan...". Le plan
+ * ScraperAPI actuel (essai) n'inclut donc pas ces pools — on reste sur le
+ * pool standard par défaut, ce qui explique la fiabilité limitée et
+ * variable observée (parfois quelques modèles passent, d'autres fois
+ * aucun). Une mise à niveau du plan ScraperAPI vers une offre incluant les
+ * pools premium/ultra premium est probablement nécessaire pour une
+ * fiabilité correcte sur ce domaine précis.
  */
 
 import { COUNTRIES, MODELS } from "./countries";
@@ -150,12 +153,15 @@ export async function fetchPricesForModel(
   }
 
   const targetUrl = buildTeslaApiUrl(countryCode, modelSlug);
-  // ultra_premium=true : premium=true seul n'a pas suffi (même message
-  // d'erreur ScraperAPI obtenu avec, en prod le 29/08/2026) — soit
-  // insuffisant face à Akamai, soit non inclus dans le plan d'essai actuel.
-  // ultra_premium est l'échelon suivant suggéré par ScraperAPI dans son
-  // propre message d'erreur pour les domaines protégés.
-  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&ultra_premium=true&url=${encodeURIComponent(targetUrl)}`;
+  // Ni premium=true ni ultra_premium=true : les deux ont été testés en prod
+  // le 29/08/2026 et renvoient un 403 explicite ("Your current plan does
+  // not allow you to use our premium proxies. Please upgrade your plan...")
+  // — le plan ScraperAPI actuel n'inclut pas ces pools, ajouter le
+  // paramètre ne fait qu'échouer plus vite. Tesla exigeant ces pools
+  // (domaine protégé Akamai), le pool standard reste la seule option tant
+  // que le plan n'est pas mis à niveau — d'où la fiabilité limitée
+  // observée. Voir le commit correspondant pour le detail du diagnostic.
+  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}`;
 
   let response: Response | undefined;
   let lastError: unknown;
