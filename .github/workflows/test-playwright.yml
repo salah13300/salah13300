@@ -6,6 +6,12 @@ name: Test Playwright (sans ScraperAPI)
 # si on peut remplacer ScraperAPI (payant) par une solution gratuite.
 on:
   workflow_dispatch: {}
+  push:
+    branches:
+      - claude/tesla-tracker-setup-loagx9
+    paths:
+      - ".github/workflows/test-playwright.yml"
+      - "tesla-price-tracker/scripts/test-playwright-fetch.js"
 
 jobs:
   test-playwright:
