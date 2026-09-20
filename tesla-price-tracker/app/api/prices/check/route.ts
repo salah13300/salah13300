@@ -7,9 +7,15 @@ import { countrySchema, modelsListSchema } from "@/lib/validation";
 // sans limite de temps) plutôt que par un cron Vercel : testé en prod le
 // 29/08/2026, les fonctions serverless Vercel (limitées à 300s même avec un
 // pays/quelques modèles à la fois) échouaient encore par timeout de façon
-// intermittente à cause de la latence variable de ScraperAPI/Tesla (voir
-// lib/scraper.ts). Cette route reste utile pour un déclenchement manuel/debug
-// (curl ou fetch() avec le header Authorization ci-dessous).
+// intermittente à cause de la latence variable de Tesla (voir lib/scraper.ts).
+//
+// IMPORTANT (20/09/2026) : depuis l'abandon de ScraperAPI, lib/scraper.ts
+// lance un navigateur Chromium local (Playwright) pour rendre la page —
+// binaire absent de l'environnement serverless Vercel, donc cette route
+// échouera si elle est appelée en production sur Vercel. Elle ne fonctionne
+// plus que dans un environnement où `npx playwright install chromium` a été
+// exécuté (CI, local) — gardée pour un déclenchement manuel/debug dans ce
+// contexte (curl ou fetch() avec le header Authorization ci-dessous).
 export const maxDuration = 290;
 // Empêche Vercel de mettre en cache la réponse de cette route (voir
 // lib/scraper.ts pour le détail du bug de cache repéré le 30/08/2026 sur

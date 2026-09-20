@@ -1,25 +1,26 @@
 /**
  * Scraper des prix Tesla neufs.
  *
- * PIVOT (30/08/2026) : l'approche précédente (API d'inventaire
- * /inventory/api/v4/inventory-results) est abandonnée. Elle listait les
- * véhicules réellement en stock, mais :
- * 1. Elle nécessite un vrai rendu navigateur pour passer le challenge
- *    anti-bot Akamai (`render=true` côté ScraperAPI) — découvert en ouvrant
- *    l'URL cible directement dans un navigateur normal, qui renvoyait
- *    {"cpr_chlge":"true",...} au lieu des résultats.
- * 2. Même une fois ce point réglé, elle renvoie légitimement 0 résultat
- *    dès qu'aucun véhicule neuf n'est en stock sur le marché visé (ce qui
- *    est le cas normal pour la France en ce moment) — pas un bug, mais pas
- *    exploitable pour un suivi de prix quotidien fiable.
+ * PIVOT 1 (30/08/2026) : l'approche précédente (API d'inventaire
+ * /inventory/api/v4/inventory-results) est abandonnée au profit d'un scrap
+ * direct de la page configurateur publique (ex.
+ * tesla.com/fr_fr/model3/design#overview), qui affiche le prix catalogue de
+ * la configuration de base — toujours disponible, que du stock existe ou
+ * non. Le prix n'est pas présent dans le HTML initial (récupéré par Tesla
+ * via un appel séparé vers sa "pricing gateway" après chargement) : il faut
+ * un rendu JS complet pour laisser cet appel se terminer avant de lire le
+ * HTML final.
  *
- * Nouvelle approche : scraper directement la page configurateur publique
- * (ex. tesla.com/fr_fr/model3/design#overview), qui affiche le prix
- * catalogue de la configuration de base — toujours disponible, que du
- * stock existe ou non. Le prix n'est pas présent dans le HTML initial
- * (récupéré par Tesla via un appel séparé vers sa "pricing gateway" après
- * chargement) : `render=true` est nécessaire pour laisser ce rendu se
- * terminer avant de lire le HTML final.
+ * PIVOT 2 (20/09/2026) : ScraperAPI (utilisé jusque-là comme proxy de rendu
+ * pour passer la protection anti-bot Akamai de tesla.com) est abandonné —
+ * coût mensuel ($49/mois) disproportionné pour ~26 relevés/jour (13 pays x
+ * Model 3/Y). Remplacé par un navigateur headless local (Playwright,
+ * gratuit, voir fetchRenderedHtmlBrowser) lancé directement dans le
+ * workflow GitHub Actions. Repli : si l'extraction par regex échoue, un
+ * agent IA (lib/aiAgent.ts, Claude Haiku) tente d'extraire le prix à partir
+ * des extraits de texte contenant le symbole monétaire — plus robuste si
+ * Tesla change la structure de sa page, mais plus lent/coûteux, donc
+ * utilisé uniquement en dernier recours.
  *
  * Ancre repérée le 30/08/2026 dans le HTML rendu, stable sur plusieurs
  * vérifications :
@@ -37,7 +38,9 @@
  * Cybertruck, non vendu en Europe.
  */
 
+import { chromium, type Browser } from "playwright";
 import { COUNTRIES, MODELS } from "./countries";
+import { extractPriceWithAI } from "./aiAgent";
 
 export interface PriceResult {
   country: string;
@@ -174,61 +177,74 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchRenderedHtml(targetUrl: string): Promise<string> {
-  const apiKey = process.env.SCRAPERAPI_KEY;
-  if (!apiKey) {
-    throw new Error("SCRAPERAPI_KEY manquant dans les variables d'environnement");
+// Navigateur headless partagé entre tous les relevés d'un même run (voir
+// lib/priceCheck.ts) : lancer un navigateur par relevé serait beaucoup plus
+// lent et gourmand en mémoire. Chaque relevé ouvre son propre contexte
+// (cookies isolés) puis le referme — voir fetchRenderedHtmlBrowser.
+let browserPromise: Promise<Browser> | null = null;
+
+function getBrowser(): Promise<Browser> {
+  if (!browserPromise) {
+    browserPromise = chromium.launch({ headless: true });
   }
+  return browserPromise;
+}
 
-  // ultra_premium=true : tesla.com est un domaine protégé côté ScraperAPI
-  // (Akamai) — le pool standard et même premium=true se sont révélés
-  // insuffisants en pratique (vérifié en prod le 29-30/08/2026).
-  // render=true : nécessaire pour laisser le temps à l'appel JS de pricing
-  // de se terminer avant de lire le HTML (voir docstring en haut du
-  // fichier) — coûte plus cher en crédits ScraperAPI mais indispensable ici.
-  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&ultra_premium=true&render=true&url=${encodeURIComponent(targetUrl)}`;
+// À appeler une fois tous les relevés terminés (voir scripts/check-prices.ts)
+// pour que le process Node se termine proprement au lieu de rester bloqué
+// par un navigateur encore ouvert.
+export async function closeBrowser(): Promise<void> {
+  if (browserPromise) {
+    const browser = await browserPromise;
+    await browser.close();
+    browserPromise = null;
+  }
+}
 
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+// Taille observée d'un rendu complet et réussi : ~1,2 à 1,6 million de
+// caractères (page configurateur entièrement hydratée). Un rendu raté
+// (page interrompue avant la fin du chargement JS) est donc largement
+// en-dessous de ce seuil.
+const MIN_HTML_LENGTH = 200000;
+
+export async function fetchRenderedHtmlBrowser(targetUrl: string): Promise<string> {
+  const browser = await getBrowser();
   let lastError: unknown;
   let lastHtml: string | undefined;
 
-  // Taille observée d'un rendu complet et réussi : ~1,2 à 1,6 million de
-  // caractères (page configurateur entièrement hydratée). Un rendu raté
-  // (ScraperAPI renvoie parfois un 200 avec seulement le squelette HTML
-  // initial, ~12 000 caractères — repéré le 30/08/2026 sur model-s, mais
-  // ça peut arriver ponctuellement sur n'importe quel modèle/pays) est donc
-  // largement en-dessous de ce seuil.
-  const MIN_HTML_LENGTH = 200000;
-
-  // 3 tentatives, 75s par tentative : le relevé quotidien passe par le
-  // workflow GitHub Actions (.github/workflows/check-prices.yml), sans
-  // limite de temps stricte contrairement aux fonctions serverless Vercel.
-  // On réessaie sur timeout/erreur réseau, 429 (trop de requêtes
-  // simultanées), tout 5xx (erreur transitoire côté ScraperAPI ou de la
-  // cible relayée), et maintenant aussi sur une page anormalement courte
-  // (rendu JS incomplet côté ScraperAPI, même avec un 200 OK).
-  //
-  // cache: "no-store" indispensable : Next.js met en cache les appels
-  // fetch() par défaut (même à l'intérieur d'une route dynamique) — repéré
-  // le 30/08/2026 en observant une "2e tentative" répondre en 442ms au lieu
-  // des dizaines de secondes habituelles, avec exactement la même réponse
-  // (tronquée) que la première. Sans ce paramètre, les tentatives de retry
-  // pouvaient renvoyer une page ratée mise en cache au lieu de retenter
-  // réellement le réseau.
+  // 3 tentatives : on réessaie sur timeout/erreur réseau et sur une page
+  // anormalement courte (rendu JS incomplet, challenge anti-bot affiché à
+  // la place du contenu...). Chaque tentative utilise un contexte neuf
+  // (cookies/session repartis à zéro) plutôt que de réutiliser la même
+  // page, au cas où une tentative précédente aurait laissé la page dans un
+  // état bloqué (ex. bannière de consentement cookies jamais fermée).
   const MAX_ATTEMPTS = 3;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const context = await browser.newContext({ userAgent: USER_AGENT });
     try {
-      const response = await fetch(proxyUrl, {
-        signal: AbortSignal.timeout(85000),
-        cache: "no-store",
+      const page = await context.newPage();
+      const response = await page.goto(targetUrl, {
+        waitUntil: "networkidle",
+        timeout: 45000,
       });
 
-      if (response.status === 429 || response.status >= 500) {
-        lastError = new Error(`Statut ${response.status}`);
-      } else if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        throw new Error(`Échec de récupération de la page: ${response.status} ${body.slice(0, 300)}`);
+      if (response && response.status() >= 500) {
+        lastError = new Error(`Statut ${response.status()}`);
+      } else if (response && response.status() >= 400) {
+        // Modèle non commandable sur ce marché (redirection vers
+        // l'inventaire d'occasion, 404...) : comportement attendu pour
+        // Model S/X/Cybertruck en Europe (voir docstring en haut du
+        // fichier), pas la peine de réessayer — on renvoie le HTML tel
+        // quel, parseConfiguratorPrice ne trouvera simplement aucun prix.
+        return await page.content();
       } else {
-        const html = await response.text();
+        // Laisse le temps à l'appel JS vers la "pricing gateway" Tesla de
+        // se terminer après le networkidle initial (voir docstring).
+        await page.waitForTimeout(4000);
+        const html = await page.content();
         lastHtml = html;
         if (html.length >= MIN_HTML_LENGTH) {
           return html;
@@ -237,6 +253,8 @@ async function fetchRenderedHtml(targetUrl: string): Promise<string> {
       }
     } catch (err) {
       lastError = err;
+    } finally {
+      await context.close();
     }
     if (attempt < MAX_ATTEMPTS - 1) {
       await sleep(3000 * (attempt + 1));
@@ -258,11 +276,53 @@ async function fetchRenderedHtml(targetUrl: string): Promise<string> {
   );
 }
 
+// Extraits de texte autour de chaque occurrence du symbole monétaire —
+// passés à l'agent IA (lib/aiAgent.ts) en repli quand la regex ci-dessus ne
+// trouve rien. Volontairement plus permissif que parseConfiguratorPrice
+// (pas de filtre par fourchette plausible) : c'est justement le rôle de
+// l'IA de trancher parmi des candidats bruts.
+function extractCandidateSnippets(html: string, currency: string): string[] {
+  const symbol = CURRENCY_SYMBOLS[currency] ?? "€";
+  const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const contextRegex = new RegExp(`.{0,60}${escapedSymbol}.{0,20}|.{0,20}${escapedSymbol}.{0,60}`, "g");
+  const text = html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ");
+  const matches = [...text.matchAll(contextRegex)].map((m) => m[0].trim()).filter(Boolean);
+  return [...new Set(matches)].slice(0, 40);
+}
+
 export async function fetchPricesForModel(
   countryCode: string,
   modelSlug: string
 ): Promise<PriceResult[]> {
   const targetUrl = buildTeslaConfiguratorUrl(countryCode, modelSlug);
-  const html = await fetchRenderedHtml(targetUrl);
-  return parseConfiguratorPrice(html, countryCode, modelSlug);
+  const html = await fetchRenderedHtmlBrowser(targetUrl);
+
+  const regexResult = parseConfiguratorPrice(html, countryCode, modelSlug);
+  if (regexResult.length > 0) {
+    return regexResult;
+  }
+
+  // Repli IA : la regex n'a rien trouvé (page inhabituelle, structure
+  // modifiée...) — voir docstring en haut du fichier. Pas de coût/latence
+  // supplémentaire dans le cas normal, uniquement en cas d'échec.
+  const country = COUNTRIES.find((c) => c.code === countryCode);
+  const currency = country?.currency ?? "EUR";
+  const snippets = extractCandidateSnippets(html, currency);
+  const aiPrice = await extractPriceWithAI(snippets, currency);
+  if (aiPrice === null) {
+    return [];
+  }
+
+  return [
+    {
+      country: countryCode,
+      model: modelSlug,
+      trim: "Standard",
+      priceCents: Math.round(aiPrice * 100),
+      currency,
+    },
+  ];
 }

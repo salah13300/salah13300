@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
+import { fetchRenderedHtmlBrowser } from "@/lib/scraper";
 
-// Route de diagnostic temporaire (à supprimer une fois le nouveau scraper
-// basé sur la page configurateur écrit) : rend une page tesla.com donnée
-// via ScraperAPI (render=true, pour laisser le temps à l'appel JS de
-// pricing de se terminer) et extrait les motifs ressemblant à un prix, pour
-// repérer où et sous quelle forme le prix apparaît dans le HTML final.
+// Route de diagnostic : rend une page tesla.com donnée via un navigateur
+// headless local (Playwright, voir lib/scraper.ts — remplace ScraperAPI
+// depuis le 20/09/2026, abandonné pour son coût) et extrait les motifs
+// ressemblant à un prix, pour repérer où et sous quelle forme le prix
+// apparaît dans le HTML final.
 export const maxDuration = 90;
-// Repéré le 30/08/2026 : même avec cache: "no-store" sur le fetch() interne
-// vers ScraperAPI, deux appels identiques renvoyaient la même réponse
-// (tronquée) en ~400ms — beaucoup trop rapide pour un vrai aller-retour.
-// La réponse de LA ROUTE elle-même était mise en cache par Vercel, pas
-// seulement l'appel interne. force-dynamic empêche toute mise en cache de
-// la réponse de cette route.
+// force-dynamic empêche toute mise en cache de la réponse de cette route
+// (voir lib/scraper.ts pour le détail du bug de cache repéré le
+// 30/08/2026 sur une route similaire).
 export const dynamic = "force-dynamic";
 
 // Restreint à tesla.com : évite qu'un appelant fasse relayer n'importe

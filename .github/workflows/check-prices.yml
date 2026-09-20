@@ -2,10 +2,16 @@ name: Relevé des prix Tesla
 
 # Remplace le cron Vercel pour /api/prices/check : les fonctions serverless
 # Vercel sont limitées à 300s d'exécution, insuffisant pour relever les 13
-# pays x 5 modèles de façon fiable vu la latence variable de ScraperAPI/Tesla
-# (voir tesla-price-tracker/lib/priceCheck.ts). Un job GitHub Actions n'a pas
-# cette limite (jusqu'à 6h), donc on utilise directement le script
+# pays x 5 modèles de façon fiable. Un job GitHub Actions n'a pas cette
+# limite (jusqu'à 6h), donc on utilise directement le script
 # scripts/check-prices.ts (checkAllPrices), prévu pour ça.
+#
+# 20/09/2026 : ScraperAPI abandonné (coût mensuel disproportionné pour le
+# volume réel) au profit d'un navigateur headless local (Playwright,
+# gratuit — voir tesla-price-tracker/lib/scraper.ts), d'où l'étape
+# d'installation de Chromium ci-dessous. ANTHROPIC_API_KEY alimente l'agent
+# IA (tesla-price-tracker/lib/aiAgent.ts), utilisé en repli d'extraction et
+# pour juger les écarts de prix suspects avant d'alerter les abonnés.
 on:
   schedule:
     - cron: "0 5 * * *"
@@ -29,8 +35,10 @@ jobs:
 
       - run: npm ci
 
+      - run: npx playwright install --with-deps chromium
+
       - run: npm run check-prices
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}

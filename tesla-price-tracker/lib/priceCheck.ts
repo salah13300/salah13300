@@ -1,7 +1,17 @@
 import { prisma } from "./db";
-import { fetchPricesForModel, type PriceResult } from "./scraper";
+import { fetchPricesForModel, closeBrowser, type PriceResult } from "./scraper";
 import { sendPriceDropAlert } from "./notify";
+import { checkPriceAnomaly } from "./aiAgent";
 import { COUNTRIES, MODELS } from "./countries";
+
+export { closeBrowser };
+
+// Seuil d'écart (par rapport au relevé précédent) au-delà duquel on demande
+// à l'agent IA (lib/aiAgent.ts) de juger si le changement est plausible
+// avant de déclencher une alerte — voir docstring de lib/aiAgent.ts.
+// En-dessous, pas d'appel IA : la grande majorité des relevés quotidiens
+// sont stables ou ne varient que légèrement.
+const ANOMALY_THRESHOLD = 0.25;
 
 async function checkPricesForModelAndCountry(
   countryCode: string,
@@ -11,18 +21,56 @@ async function checkPricesForModelAndCountry(
   const prices: PriceResult[] = await fetchPricesForModel(countryCode, modelSlug);
 
   for (const price of prices) {
-    // 1. Enregistrer le relevé
+    const effectiveCurrency = price.currency || currency;
+
+    // 1. Si l'écart avec le relevé précédent est important, demander à
+    // l'IA si ce changement semble plausible avant d'aller plus loin — voir
+    // ANOMALY_THRESHOLD. Ne bloque jamais l'enregistrement du relevé
+    // lui-même (on ne perd jamais la donnée brute), seulement le
+    // déclenchement d'une alerte sur une valeur suspecte.
+    const previous = await prisma.priceSnapshot.findFirst({
+      where: { country: price.country, model: price.model, trim: price.trim },
+      orderBy: { recordedAt: "desc" },
+    });
+
+    let anomalyNote: string | null = null;
+    if (previous && previous.priceCents > 0) {
+      const relativeChange =
+        Math.abs(price.priceCents - previous.priceCents) / previous.priceCents;
+      if (relativeChange > ANOMALY_THRESHOLD) {
+        const verdict = await checkPriceAnomaly({
+          country: price.country,
+          model: price.model,
+          trim: price.trim,
+          currency: effectiveCurrency,
+          previousPriceCents: previous.priceCents,
+          newPriceCents: price.priceCents,
+        });
+        if (!verdict.plausible) {
+          anomalyNote = verdict.reason;
+          console.warn(
+            `Anomalie suspectée pour ${price.model}/${price.country} (${price.trim}): ${verdict.reason} ` +
+              `(ancien: ${previous.priceCents}, nouveau: ${price.priceCents})`
+          );
+        }
+      }
+    }
+
+    // 2. Enregistrer le relevé (toujours, même en cas d'anomalie suspectée
+    // — la donnée brute reste utile pour une vérification manuelle).
     await prisma.priceSnapshot.create({
       data: {
         country: price.country,
         model: price.model,
         trim: price.trim,
         priceCents: price.priceCents,
-        currency: price.currency || currency,
+        currency: effectiveCurrency,
       },
     });
 
-    // 2. Vérifier si c'est un nouveau plus bas historique
+    if (anomalyNote) continue;
+
+    // 4. Vérifier si c'est un nouveau plus bas historique
     const previousMin = await prisma.priceSnapshot.aggregate({
       where: {
         country: price.country,
@@ -38,7 +86,7 @@ async function checkPricesForModelAndCountry(
 
     if (!isNewLow) continue;
 
-    // 3. Notifier les abonnés concernés (uniquement les comptes payants actifs)
+    // 5. Notifier les abonnés concernés (uniquement les comptes payants actifs)
     const matchingAlerts = await prisma.priceAlert.findMany({
       where: {
         country: price.country,
