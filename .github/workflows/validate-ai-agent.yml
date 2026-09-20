@@ -1,0 +1,37 @@
+name: Validation agent IA (ponctuel)
+
+# Vérifie que le nouveau pipeline (Playwright + Claude, remplace ScraperAPI)
+# fonctionne réellement contre tesla.com, sur un petit échantillon, avant de
+# le laisser tourner en entier sur les 65 vérifications quotidiennes. À
+# supprimer une fois la validation faite.
+on:
+  push:
+    branches:
+      - claude/tesla-tracker-setup-loagx9
+    paths:
+      - ".github/workflows/validate-ai-agent.yml"
+      - "tesla-price-tracker/scripts/validate-ai-agent.ts"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: tesla-price-tracker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: tesla-price-tracker/package-lock.json
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - run: npx tsx scripts/validate-ai-agent.ts
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
