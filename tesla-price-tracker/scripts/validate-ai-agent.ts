@@ -2,20 +2,23 @@
 // vérifie que fetchPricesForModel (Playwright + repli IA, lib/scraper.ts)
 // fonctionne réellement contre tesla.com dans un environnement GitHub
 // Actions, sans toucher à la base de données.
-import { fetchPricesForModel, closeBrowser } from "../lib/scraper";
+import { fetchRenderedHtmlBrowser, buildTeslaConfiguratorUrl, closeBrowser } from "../lib/scraper";
 
 const CASES: [string, string][] = [
   ["FR", "model-3"],
   ["DE", "model-y"],
-  ["ES", "model-s"], // attendu : 0 résultat (non commandable neuf, voir lib/scraper.ts)
 ];
 
 (async () => {
   for (const [country, model] of CASES) {
-    console.log(`=== ${model}/${country} ===`);
+    const url = buildTeslaConfiguratorUrl(country, model);
+    console.log(`=== ${model}/${country} (${url}) ===`);
     try {
-      const results = await fetchPricesForModel(country, model);
-      console.log(JSON.stringify(results));
+      const html = await fetchRenderedHtmlBrowser(url);
+      console.log("HTML length:", html.length);
+      console.log("Contient 'cpr_chlge' (challenge Akamai):", html.includes("cpr_chlge"));
+      console.log("Contient 'Access Denied':", html.toLowerCase().includes("access denied"));
+      console.log("Snippet:", html.slice(0, 1500).replace(/\s+/g, " "));
     } catch (err) {
       console.log("ERREUR:", err instanceof Error ? err.message : String(err));
     }
