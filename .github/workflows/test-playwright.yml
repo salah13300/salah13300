@@ -1,0 +1,28 @@
+name: Test Playwright (sans ScraperAPI)
+
+# Test ponctuel : vérifie si un navigateur headless Playwright (gratuit, pas
+# de proxy payant) suffit à charger la page configurateur Tesla et à en
+# extraire le prix, sans passer par ScraperAPI. Résultat utilisé pour décider
+# si on peut remplacer ScraperAPI (payant) par une solution gratuite.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  test-playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install playwright
+        working-directory: tesla-price-tracker
+
+      - run: npx playwright install --with-deps chromium
+        working-directory: tesla-price-tracker
+
+      - run: node scripts/test-playwright-fetch.js
+        working-directory: tesla-price-tracker
