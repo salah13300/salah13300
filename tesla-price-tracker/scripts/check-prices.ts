@@ -1,4 +1,4 @@
-import { checkAllPrices, closeBrowser } from "../lib/priceCheck";
+import { checkAllPrices } from "../lib/priceCheck";
 
 // Seuls Model 3 et Model Y sont commandables neufs en Europe actuellement
 // (voir lib/scraper.ts) : un échec sur model-s/model-x/cybertruck est le
@@ -11,18 +11,16 @@ import { checkAllPrices, closeBrowser } from "../lib/priceCheck";
 const CRITICAL_MODELS = new Set(["model-3", "model-y"]);
 
 checkAllPrices()
-  .then(async (result) => {
+  .then((result) => {
     console.log(`Terminé : ${result.checked} relevés effectués.`);
     if (result.failed.length > 0) {
       console.error(`${result.failed.length} échec(s) :`, result.failed);
     }
 
     const criticalFailures = result.failed.filter((f) => CRITICAL_MODELS.has(f.model));
-    await closeBrowser();
     process.exit(criticalFailures.length > 0 ? 1 : 0);
   })
-  .catch(async (err) => {
+  .catch((err) => {
     console.error(err);
-    await closeBrowser();
     process.exit(1);
   });

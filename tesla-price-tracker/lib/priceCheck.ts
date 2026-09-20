@@ -1,10 +1,8 @@
 import { prisma } from "./db";
-import { fetchPricesForModel, closeBrowser, type PriceResult } from "./scraper";
+import { fetchPricesForModel, type PriceResult } from "./scraper";
 import { sendPriceDropAlert } from "./notify";
 import { checkPriceAnomaly } from "./aiAgent";
 import { COUNTRIES, MODELS } from "./countries";
-
-export { closeBrowser };
 
 // Seuil d'écart (par rapport au relevé précédent) au-delà duquel on demande
 // à l'agent IA (lib/aiAgent.ts) de juger si le changement est plausible

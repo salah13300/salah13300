@@ -9,13 +9,11 @@ import { countrySchema, modelsListSchema } from "@/lib/validation";
 // pays/quelques modèles à la fois) échouaient encore par timeout de façon
 // intermittente à cause de la latence variable de Tesla (voir lib/scraper.ts).
 //
-// IMPORTANT (20/09/2026) : depuis l'abandon de ScraperAPI, lib/scraper.ts
-// lance un navigateur Chromium local (Playwright) pour rendre la page —
-// binaire absent de l'environnement serverless Vercel, donc cette route
-// échouera si elle est appelée en production sur Vercel. Elle ne fonctionne
-// plus que dans un environnement où `npx playwright install chromium` a été
-// exécuté (CI, local) — gardée pour un déclenchement manuel/debug dans ce
-// contexte (curl ou fetch() avec le header Authorization ci-dessous).
+// 20/09/2026 : la récupération des prix est déléguée à l'agent IA
+// (lib/aiAgent.ts, Claude + outil serveur web_fetch, exécuté côté Anthropic)
+// — plus de navigateur local ni de proxy, cette route fonctionne donc de
+// nouveau normalement sur Vercel. Gardée pour un déclenchement manuel/debug
+// (curl ou fetch() avec le header Authorization ci-dessous).
 export const maxDuration = 290;
 // Empêche Vercel de mettre en cache la réponse de cette route (voir
 // lib/scraper.ts pour le détail du bug de cache repéré le 30/08/2026 sur

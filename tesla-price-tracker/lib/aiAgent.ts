@@ -1,28 +1,35 @@
 /**
- * Agent IA (20/09/2026) : remplace ScraperAPI (abandonné, trop cher pour le
- * volume réel — ~26 relevés/jour Model 3 + Model Y). Deux rôles :
+ * Agent IA (20/09/2026) : remplace entièrement le scraping local.
  *
- * 1. Repli d'extraction : si la regex de lib/scraper.ts (rapide, gratuite,
- *    fiable dans l'immense majorité des cas) ne trouve aucun prix plausible
- *    dans la page rendue, on passe les extraits candidats à Claude pour
- *    qu'il tranche — utile si Tesla change la structure de sa page.
- * 2. Analyse post-relevé : avant de déclencher une alerte de baisse de prix,
- *    si le nouveau prix diffère fortement du précédent relevé, on demande à
- *    Claude si ce changement ressemble à un vrai ajustement catalogue Tesla
- *    ou à une erreur d'extraction (ex: mensualité de leasing capturée au
- *    lieu du prix d'achat) — évite d'alerter des abonnés payants sur une
- *    valeur aberrante.
+ * Historique : ScraperAPI (proxy résidentiel payant, $49/mois) a d'abord été
+ * abandonné au profit d'un navigateur headless local (Playwright, gratuit).
+ * Mais un test en conditions réelles sur GitHub Actions a confirmé que
+ * tesla.com bloque directement les IP des runners au niveau Akamai (réponse
+ * "Access Denied" immédiate, ~300 caractères, avant même le rendu JS) — un
+ * navigateur local ne change rien à ça, seul un proxy à IP résidentielle
+ * réglait ce point.
  *
- * Modèle : Haiku 4.5, volontairement — tâche d'extraction/classification
- * simple et à fort volume, le choix le moins cher est justifié ici (c'est
- * même le but recherché par l'utilisateur : réduire le coût par rapport à
- * ScraperAPI).
+ * Décision (utilisateur, 20/09/2026) : plus aucun scraping local, ni proxy —
+ * c'est l'agent IA lui-même qui va chercher la page, via l'outil serveur
+ * `web_fetch` de Claude (exécuté sur l'infrastructure Anthropic, pas depuis
+ * les IP GitHub Actions bloquées). Claude récupère la page puis appelle
+ * `extract_price` avec le prix trouvé. Un seul appel API fait tout le
+ * travail (récupération + extraction), plus besoin de regex ni de
+ * navigateur.
+ *
+ * Modèle : Claude Sonnet 5 pour la récupération+extraction (fetchPriceWithAIAgent)
+ * — web_fetch (variante 20260209) n'est pas documenté comme supporté sur
+ * Haiku 4.5, et c'est le mécanisme de collecte principal, la fiabilité prime
+ * ici. Claude Haiku 4.5 reste utilisé pour checkPriceAnomaly (simple
+ * jugement textuel, pas d'outil serveur, tâche à fort volume où le coût le
+ * plus bas est justifié).
  */
 
 import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic();
-const MODEL = "claude-haiku-4-5";
+const AGENT_MODEL = "claude-sonnet-5";
+const ANOMALY_MODEL = "claude-haiku-4-5";
 
 interface ExtractPriceInput {
   found: boolean;
@@ -30,21 +37,21 @@ interface ExtractPriceInput {
   reason?: string;
 }
 
-const EXTRACT_TOOL: Anthropic.Tool = {
+const EXTRACT_PRICE_TOOL: Anthropic.Tool = {
   name: "extract_price",
   description:
-    "Renvoie le prix de base (la configuration la moins chère) du véhicule Tesla trouvé dans les extraits fournis, ou found=false si aucun prix de véhicule neuf plausible n'est présent (page de redirection, modèle indisponible sur ce marché, erreur).",
+    "Renvoie le prix de base (la configuration la moins chère) du véhicule Tesla neuf trouvé sur la page récupérée, ou found=false si le véhicule n'est pas commandable neuf sur ce marché (redirection vers l'occasion, page d'erreur, page vide).",
   input_schema: {
     type: "object",
     properties: {
       found: {
         type: "boolean",
-        description: "true si un prix de véhicule neuf plausible a été identifié",
+        description: "true si un prix de véhicule neuf plausible a été identifié sur la page",
       },
       price: {
         type: "number",
         description:
-          "Le prix de base le plus bas parmi les extraits, en unité monétaire pleine (ex: 39990, pas 39990.00€ ni 3999000 centimes)",
+          "Le prix de base le plus bas trouvé sur la page, en unité monétaire pleine (ex: 39990), sans séparateurs ni symbole monétaire",
       },
       reason: {
         type: "string",
@@ -57,42 +64,67 @@ const EXTRACT_TOOL: Anthropic.Tool = {
   strict: true,
 };
 
-// Repli d'extraction, utilisé uniquement quand la regex de scraper.ts ne
-// trouve rien — voir fetchPricesForModel.
-export async function extractPriceWithAI(
-  candidateSnippets: string[],
-  currency: string
-): Promise<number | null> {
-  if (candidateSnippets.length === 0) return null;
+// Récupère et extrait le prix de base d'une page configurateur Tesla en un
+// seul agent IA : Claude appelle lui-même web_fetch (côté serveur Anthropic,
+// pas depuis nos propres IP) puis extract_price avec le résultat. Renvoie
+// null si aucun prix n'a pu être extrait (page indisponible, modèle non
+// commandable sur ce marché, échec de l'appel IA...).
+export async function fetchPriceWithAIAgent(url: string, currency: string): Promise<number | null> {
+  const tools = [
+    { type: "web_fetch_20260209" as const, name: "web_fetch" as const, max_uses: 3, max_content_tokens: 8000 },
+    EXTRACT_PRICE_TOOL,
+  ];
+
+  const messages: Anthropic.MessageParam[] = [
+    {
+      role: "user",
+      content:
+        `Utilise l'outil web_fetch pour récupérer cette page : ${url}\n\n` +
+        `C'est la page configurateur d'un véhicule Tesla neuf, avec le prix affiché en ${currency}. Une fois la ` +
+        `page récupérée, appelle extract_price avec le prix de base (la configuration/finition la moins chère), ` +
+        `en ignorant les mensualités de leasing, frais de dossier, bonus/malus écologique. Si le véhicule n'est ` +
+        `pas commandable neuf sur ce marché (redirection vers l'inventaire d'occasion, page d'erreur, page vide), ` +
+        `appelle extract_price avec found=false.`,
+    },
+  ];
 
   try {
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: 512,
-      tools: [EXTRACT_TOOL],
-      tool_choice: { type: "tool", name: "extract_price" },
-      messages: [
-        {
-          role: "user",
-          content:
-            `Voici des extraits de texte pris sur une page configurateur Tesla (prix en ${currency}). ` +
-            `Identifie le prix de base du véhicule (la configuration/finition la moins chère), en ignorant ` +
-            `les mensualités de leasing, frais de dossier, bonus/malus écologique, ou tout montant qui n'est ` +
-            `pas un prix d'achat de véhicule.\n\nExtraits:\n${candidateSnippets.join("\n---\n")}`,
-        },
-      ],
-    });
+    // web_fetch peut nécessiter plusieurs aller-retours gérés côté serveur
+    // avant que Claude n'appelle extract_price (voir stop_reason
+    // "pause_turn" dans la doc Anthropic) — on relance tant que ce n'est
+    // pas encore le cas, dans une limite de tours pour éviter une boucle
+    // infinie en cas de souci inattendu.
+    for (let turn = 0; turn < 5; turn++) {
+      const response = await client.messages.create({
+        model: AGENT_MODEL,
+        max_tokens: 2048,
+        tools,
+        messages,
+      });
 
-    const toolUse = response.content.find(
-      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
-    );
-    if (!toolUse) return null;
+      const toolUse = response.content.find(
+        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "extract_price"
+      );
+      if (toolUse) {
+        const input = toolUse.input as ExtractPriceInput;
+        if (!input.found || typeof input.price !== "number") return null;
+        return input.price;
+      }
 
-    const input = toolUse.input as ExtractPriceInput;
-    if (!input.found || typeof input.price !== "number") return null;
-    return input.price;
+      if (response.stop_reason === "pause_turn") {
+        messages.push({ role: "assistant", content: response.content });
+        continue;
+      }
+
+      // Terminé sans appeler extract_price (réponse texte, refus...) :
+      // rien d'exploitable.
+      return null;
+    }
+
+    console.error(`Agent IA : trop de tours sans réponse exploitable pour ${url}`);
+    return null;
   } catch (err) {
-    console.error("Échec de l'extraction IA du prix:", err);
+    console.error(`Échec de l'agent IA pour ${url}:`, err);
     return null;
   }
 }
@@ -140,7 +172,7 @@ export async function checkPriceAnomaly(params: {
 }): Promise<AnomalyVerdict> {
   try {
     const response = await client.messages.create({
-      model: MODEL,
+      model: ANOMALY_MODEL,
       max_tokens: 300,
       tools: [ANOMALY_TOOL],
       tool_choice: { type: "tool", name: "judge_price_change" },

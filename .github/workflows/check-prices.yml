@@ -6,12 +6,14 @@ name: Relevé des prix Tesla
 # limite (jusqu'à 6h), donc on utilise directement le script
 # scripts/check-prices.ts (checkAllPrices), prévu pour ça.
 #
-# 20/09/2026 : ScraperAPI abandonné (coût mensuel disproportionné pour le
-# volume réel) au profit d'un navigateur headless local (Playwright,
-# gratuit — voir tesla-price-tracker/lib/scraper.ts), d'où l'étape
-# d'installation de Chromium ci-dessous. ANTHROPIC_API_KEY alimente l'agent
-# IA (tesla-price-tracker/lib/aiAgent.ts), utilisé en repli d'extraction et
-# pour juger les écarts de prix suspects avant d'alerter les abonnés.
+# 20/09/2026 : ScraperAPI puis un navigateur headless local ont été
+# abandonnés — tesla.com bloque directement les IP des runners GitHub
+# Actions (Akamai), un navigateur local n'y change rien. La récupération
+# des prix est maintenant entièrement déléguée à l'agent IA
+# (tesla-price-tracker/lib/aiAgent.ts, Claude + outil serveur web_fetch,
+# exécuté depuis l'infrastructure Anthropic) — ANTHROPIC_API_KEY est donc
+# requis pour que ce workflow fonctionne (secret à ajouter sur le repo,
+# clé créée sur https://console.anthropic.com).
 on:
   schedule:
     - cron: "0 5 * * *"
@@ -34,8 +36,6 @@ jobs:
           cache-dependency-path: tesla-price-tracker/package-lock.json
 
       - run: npm ci
-
-      - run: npx playwright install --with-deps chromium
 
       - run: npm run check-prices
         env:

@@ -1,19 +1,15 @@
 import { NextResponse } from "next/server";
-import { fetchRenderedHtmlBrowser } from "@/lib/scraper";
+import { fetchPriceWithAIAgent } from "@/lib/aiAgent";
 
-// Route de diagnostic : rend une page tesla.com donnée via un navigateur
-// headless local (Playwright, voir lib/scraper.ts — remplace ScraperAPI
-// depuis le 20/09/2026, abandonné pour son coût) et extrait les motifs
-// ressemblant à un prix, pour repérer où et sous quelle forme le prix
-// apparaît dans le HTML final.
+// Route de diagnostic : déclenche l'agent IA (lib/aiAgent.ts, Claude +
+// web_fetch) sur une URL tesla.com donnée et renvoie le prix trouvé (ou
+// null), pour vérifier manuellement que la récupération fonctionne sans
+// attendre le prochain relevé quotidien.
 export const maxDuration = 90;
-// force-dynamic empêche toute mise en cache de la réponse de cette route
-// (voir lib/scraper.ts pour le détail du bug de cache repéré le
-// 30/08/2026 sur une route similaire).
 export const dynamic = "force-dynamic";
 
 // Restreint à tesla.com : évite qu'un appelant fasse relayer n'importe
-// quelle URL arbitraire via notre clé ScraperAPI (SSRF/abus de crédits).
+// quelle URL arbitraire via notre clé Anthropic (abus de crédits).
 const ALLOWED_HOST = "www.tesla.com";
 
 export async function GET(request: Request) {
@@ -24,61 +20,17 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const path = searchParams.get("path") ?? "/fr_fr/model3/design";
+  const currency = searchParams.get("currency") ?? "EUR";
 
   if (!path.startsWith("/")) {
     return NextResponse.json({ error: "'path' doit commencer par /" }, { status: 400 });
   }
 
-  const apiKey = process.env.SCRAPERAPI_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "SCRAPERAPI_KEY manquant" }, { status: 500 });
-  }
-
   const targetUrl = `https://${ALLOWED_HOST}${path}`;
-  const proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&ultra_premium=true&render=true&url=${encodeURIComponent(targetUrl)}`;
 
   try {
-    const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(85000), cache: "no-store" });
-    const html = await response.text();
-
-    // Clés JSON structurées probables (plus fiable qu'un texte de mentions
-    // légales) : vehiclePrice, purchasePrice, basePrice, grossPrice.
-    const jsonFieldMatches = [
-      ...html.matchAll(/"(vehiclePrice|purchasePrice|basePrice|grossPrice|totalPrice)"\s*:\s*[^,}]{1,40}/gi),
-    ].map((m) => m[0]);
-
-    // Motifs plausibles pour un prix affiché en euros — Tesla utilise
-    // &nbsp; (pas un espace normal), parfois PLUSIEURS fois dans un même
-    // nombre (ex. "37&nbsp;133&nbsp;€"), pas juste juste avant le symbole
-    // monétaire comme le motif précédent le supposait (repéré le
-    // 30/08/2026 : aucun grand prix trouvé sur la page BE alors que la
-    // page était bien rendue en entier).
-    const euroSign = String.fromCharCode(0x20ac);
-    const priceRegex = new RegExp(
-      "[0-9](?:[0-9\\s.,]|&nbsp;)*\\s?" + euroSign,
-      "g"
-    );
-    const priceMatches = [...html.matchAll(priceRegex)].map((m) => m[0]);
-
-    // Contexte textuel autour de "Prix d'achat" / "purchase" / "/mois" pour
-    // situer où le prix apparaît dans la structure de la page — "/mois"
-    // cible le bloc de prix principal (mensualité + prix d'achat total),
-    // plus universel qu'une mention légale spécifique à un marché.
-    const contextMatches = [
-      ...html.matchAll(/.{80}(Prix d.achat|purchase[_ -]?price|BasePrice|\/mois|\/mo\b).{80}/gi),
-    ].map((m) => m[0]);
-
-    return NextResponse.json({
-      targetUrl,
-      scraperApiStatus: response.status,
-      htmlLength: html.length,
-      jsonFieldMatchesSample: [...new Set(jsonFieldMatches)].slice(0, 20),
-      priceMatchesSample: [...new Set(priceMatches)].slice(0, 30),
-      contextMatchesSample: contextMatches.slice(0, 10),
-      // Extrait brut utile quand la page est anormalement courte (redirection,
-      // page d'erreur, modèle indisponible sur ce marché...).
-      htmlSnippet: html.slice(0, 3000),
-    });
+    const price = await fetchPriceWithAIAgent(targetUrl, currency);
+    return NextResponse.json({ targetUrl, currency, price });
   } catch (err) {
     return NextResponse.json(
       { status: "error", message: err instanceof Error ? err.message : String(err) },
